@@ -81,6 +81,12 @@ class Model(object):
 
 
     def define_models(self):
+        self.enc_up_pass = models.make_model(
+                "enc_up", models.enc_up,
+                n_scales = self.n_scales)
+        self.enc_down_pass = models.make_model(
+                "enc_down", models.enc_down,
+                n_scales = self.n_scales)
         self.dec_up_pass = models.make_model(
                 "dec_up", models.dec_up,
                 n_scales = self.n_scales)
@@ -88,21 +94,33 @@ class Model(object):
                 "dec_down", models.dec_down,
                 n_scales = self.n_scales)
         self.dec_params = models.make_model(
-                "dec_params", models.dec_params)
+                "dec_params", models.dec_parameters)
 
 
-    def forward_pass(self, x, c, dropout_p, init = False):
+    def train_forward_pass(self, x, c, dropout_p, init = False):
         kwargs = {"init": init, "dropout_p": dropout_p}
+        # encoder
+        hs = self.enc_up_pass(x, c, **kwargs)
+        es, qs, zs_posterior = self.enc_down_pass(hs, **kwargs)
+        # decoder
         gs = self.dec_up_pass(c, **kwargs)
-        ds = self.dec_down_pass(gs, **kwargs)
-        params = self.dec_params(x, ds[-1], **kwargs)
-        activations = gs + ds
-        return params, activations
+        ds, ps, zs_prior = self.dec_down_pass(gs, zs_posterior, training = True, **kwargs)
+        params = self.dec_params(ds[-1], **kwargs)
+        activations = hs + es + gs + ds
+        return params, qs, ps, activations
+
+
+    def test_forward_pass(self, c):
+        kwargs = {"init": False, "dropout_p": 0.0}
+        # decoder
+        gs = self.dec_up_pass(c, **kwargs)
+        ds, ps, zs_prior = self.dec_down_pass(gs, [], training = False, **kwargs)
+        params = self.dec_params(ds[-1], **kwargs)
+        return params
 
 
     def sample(self, params):
-        # MAP for Gaussian mean parameters
-        return params
+        return models.dec_sample(params)
 
 
     def likelihood_loss(self, x, params):
@@ -117,7 +135,7 @@ class Model(object):
         self.c_init = tf.placeholder(
                 tf.float32,
                 shape = [self.init_batches * self.batch_size] + self.img_shape)
-        _ = self.forward_pass(self.x_init, self.c_init, dropout_p = self.dropout_p, init = True)
+        _ = self.train_forward_pass(self.x_init, self.c_init, dropout_p = self.dropout_p, init = True)
 
         # training
         self.x = tf.placeholder(
@@ -127,11 +145,16 @@ class Model(object):
                 tf.float32,
                 shape = [self.batch_size] + self.img_shape)
         # compute parameters of model distribution
-        params, activations = self.forward_pass(self.x, self.c, dropout_p = self.dropout_p)
+        params, qs, ps, activations = self.train_forward_pass(self.x, self.c, dropout_p = self.dropout_p)
         # sample from model distribution
         sample = self.sample(params)
         # maximize likelihood
         loss = self.likelihood_loss(self.x, params)
+        for q, p in zip(qs, ps):
+            loss += models.latent_kl(q, p)
+
+        # testing
+        test_sample = self.sample(self.test_forward_pass(self.c))
 
         # optimization
         global_step = tf.Variable(0, trainable = False, name = "global_step")
@@ -152,6 +175,7 @@ class Model(object):
         self.log_ops["loss"] = loss
         self.img_ops = dict()
         self.img_ops["sample"] = sample
+        self.img_ops["test_sample"] = test_sample
         self.img_ops["x"] = self.x
         self.img_ops["c"] = self.c
 
@@ -185,7 +209,9 @@ class Model(object):
                 self.out_dir,
                 session.graph)
         self.saver = tf.train.Saver()
-        session.run(tf.global_variables_initializer(), {self.c_init: init_batch[1]})
+        session.run(tf.global_variables_initializer(), {
+            self.x_init: init_batch[0],
+            self.c_init: init_batch[1]})
         self.logger.info("Initialized model from scratch")
 
 
@@ -281,7 +307,7 @@ class Model(object):
     def test(self, c_batch):
         results = dict()
         results["cond"] = c_batch
-        results["sample"] = session.run(self.img_ops["sample"], {self.c: c_batch})
+        results["test_sample"] = session.run(self.img_ops["test_sample"], {self.c: c_batch})
         return results
 
 
