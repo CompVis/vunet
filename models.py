@@ -76,8 +76,10 @@ def dec_down(
                 ## prior
                 z = z_prior
             for i in range(n_residual_blocks // 2):
-                gz = tf.concat([gs.pop(), z], axis = -1)
-                h = nn.residual_block(h, gz)
+                n_h_channels = h.shape.as_list()[-1]
+                h = tf.concat([h, z], axis = -1)
+                h = nn.nin(h, n_h_channels)
+                h = nn.residual_block(h, gs.pop())
                 hs.append(h)
             # prepare input to next level
             if l + 1 < n_scales:
@@ -175,8 +177,8 @@ def latent_parameters(
 
 
 def logvarvar(u):
-    cutoff = -10
-    logvar = tf.nn.relu(u - cutoff) + cutoff
+    cutoff = tf.to_float(-5)
+    logvar = tf.maximum(cutoff, u)
     var = tf.exp(logvar)
     return logvar, var
 

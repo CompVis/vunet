@@ -1,6 +1,6 @@
 import tensorflow as tf
 config = tf.ConfigProto()
-config.gpu_options.allow_growth = True
+config.gpu_options.allow_growth = False
 session = tf.Session(config = config)
 
 import os, logging, shutil, datetime, time, math
@@ -128,6 +128,18 @@ class Model(object):
 
 
     def define_graph(self):
+        global_step = tf.Variable(0, trainable = False, name = "global_step")
+        lr = nn.make_linear_var(
+                global_step,
+                self.lr_decay_begin, self.lr_decay_end,
+                self.initial_lr, 0.0,
+                0.0, self.initial_lr)
+        kl_weight = nn.make_linear_var(
+                global_step,
+                self.lr_decay_begin, self.lr_decay_end // 2,
+                0.0, 1.0,
+                1e-5, 1.0)
+
         # initialization
         self.x_init = tf.placeholder(
                 tf.float32,
@@ -151,18 +163,12 @@ class Model(object):
         # maximize likelihood
         loss = self.likelihood_loss(self.x, params)
         for q, p in zip(qs, ps):
-            loss += models.latent_kl(q, p)
+            loss += kl_weight * models.latent_kl(q, p)
 
         # testing
         test_sample = self.sample(self.test_forward_pass(self.c))
 
         # optimization
-        global_step = tf.Variable(0, trainable = False, name = "global_step")
-        lr = nn.make_linear_var(
-                global_step,
-                self.lr_decay_begin, self.lr_decay_end,
-                self.initial_lr, 0.0,
-                0.0, self.initial_lr)
         optimizer = tf.train.AdamOptimizer(learning_rate = lr, beta1 = 0.5, beta2 = 0.9)
         opt_op = optimizer.minimize(loss, var_list = tf.trainable_variables())
         self.train_op = opt_op
@@ -172,22 +178,13 @@ class Model(object):
         # logging and visualization
         self.log_ops = dict()
         self.log_ops["global_step"] = global_step
+        self.log_ops["kl_weight"] = kl_weight
         self.log_ops["loss"] = loss
         self.img_ops = dict()
         self.img_ops["sample"] = sample
         self.img_ops["test_sample"] = test_sample
         self.img_ops["x"] = self.x
         self.img_ops["c"] = self.c
-
-        # gradient histograms
-        grads = tf.gradients(self.log_ops["loss"], tf.trainable_variables())
-        grads = list(zip(grads, tf.trainable_variables()))
-        for grad, var in grads:
-            if grad is not None:
-                tf.summary.histogram(var.name + '/gradient', grad)
-        # activation histograms
-        for activation in activations:
-            tf.summary.histogram(activation.name + '/activation', activation)
 
         # keep seperate train and validation summaries
         # only training summary contains histograms
