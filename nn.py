@@ -302,8 +302,13 @@ def downsample(x, num_units):
     return conv2d(x, num_units, stride = [2, 2])
 
 
-def upsample(x, num_units):
-    return deconv2d(x, num_units, stride = [2, 2])
+def upsample(x, num_units, method = "subpixel"):
+    if method == "conv_transposed":
+        return deconv2d(x, num_units, stride = [2, 2])
+    elif method == "subpixel":
+        x = conv2d(x, 4*num_units)
+        x = tf.depth_to_space(x, 2)
+        return x
 
 
 @add_arg_scope
