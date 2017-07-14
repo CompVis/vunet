@@ -194,8 +194,8 @@ class Model(object):
                 self.out_dir,
                 session.graph)
         self.saver = tf.train.Saver()
-        self.saver.restore(session, self.restore_path)
-        self.logger.info("Restored model from {}".format(self.restore_path))
+        self.saver.restore(session, restore_path)
+        self.logger.info("Restored model from {}".format(restore_path))
 
 
     def fit(self, batches, valid_batches = None):
@@ -335,7 +335,22 @@ if __name__ == "__main__":
         else:
             model.init_graph(next(init_batches))
         model.fit(batches, valid_batches)
-    else:
+    elif opt.mode == "test":
         if not opt.checkpoint:
             raise Exception("Testing requires --checkpoint")
+        batch_size = opt.batch_size
+        img_shape = 2*[opt.spatial_size] + [3]
+        data_shape = [batch_size] + img_shape
+        valid_batches = get_batches(data_shape, opt.data_index, mask = opt.mask, train = False)
+        model = Model(opt, out_dir, logger)
+        model.restore_graph(opt.checkpoint)
+
+        for i in trange(valid_batches.n // batch_size):
+            X_batch, C_batch = next(valid_batches)
+            x_gen = model.test(C_batch)
+            for k in x_gen:
+                plot_batch(x_gen[k], os.path.join(
+                    out_dir,
+                    "testing_{}_{:07}.png".format(k, i)))
+    else:
         raise NotImplemented()
