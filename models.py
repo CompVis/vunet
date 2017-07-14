@@ -174,21 +174,26 @@ def latent_parameters(
     return nn.conv2d(h, 2*num_filters)
 
 
+def logvarvar(u):
+    cutoff = -10
+    logvar = tf.nn.relu(u - cutoff) + cutoff
+    var = tf.exp(logvar)
+    return logvar, var
+
+
 def latent_sample(p):
-    mean, logvar = tf.split(p, 2, axis = 3)
-    logvar = tf.nn.tanh(logvar)
-    stddev = tf.sqrt(tf.exp(logvar))
+    mean, u = tf.split(p, 2, axis = 3)
+    logvar, var = logvarvar(u)
+    stddev = tf.sqrt(var)
     eps = tf.random_normal(mean.shape, mean = 0.0, stddev = 1.0)
     return mean + stddev * eps
 
 
 def latent_kl(q, p):
-    mean1, logvar1 = tf.split(q, 2, axis = 3)
-    logvar1 = tf.nn.tanh(logvar1)
-    var1 = tf.exp(logvar1)
-    mean2, logvar2 = tf.split(p, 2, axis = 3)
-    logvar2 = tf.nn.tanh(logvar2)
-    var2 = tf.exp(logvar2)
+    mean1, u1 = tf.split(q, 2, axis = 3)
+    logvar1, var1 = logvarvar(u1)
+    mean2, u2 = tf.split(p, 2, axis = 3)
+    logvar2, var2 = logvarvar(u2)
 
     kl = 0.5*(var1/var2 - 1.0 + tf.square(mean2 - mean1) / var2 + logvar2 - logvar1)
     kl = tf.reduce_sum(kl, axis = [1,2,3])
