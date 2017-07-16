@@ -54,9 +54,6 @@ def ce_sample(logits, temp = 1.0):
     return pixels
 
 
-zero_log_scales = False
-tanh_log_scales = False
-softplus_scales = False
 def discretized_mix_logistic_loss(x, l, sum_all=True):
     """ log-likelihood for mixture of discretized logistics, assumes the data has been rescaled to [-1,1] interval """
     xs = int_shape(
@@ -67,13 +64,7 @@ def discretized_mix_logistic_loss(x, l, sum_all=True):
     logit_probs = l[:, :, :, :nr_mix]
     l = tf.reshape(l[:, :, :, nr_mix:], xs + [nr_mix * 3])
     means = l[:, :, :, :, :nr_mix]
-    log_scales = tf.maximum(l[:, :, :, :, nr_mix:2 * nr_mix], -7.)
-    if zero_log_scales:
-        log_scales = tf.zeros_like(log_scales)
-    if tanh_log_scales:
-        log_scales = tf.nn.tanh(log_scales)
-    if softplus_scales:
-        log_scales = tf.log(tf.nn.softplus(0.001*log_scales - 3.0))
+    log_scales = tf.maximum(l[:, :, :, :, nr_mix:2 * nr_mix], -2.)
     coeffs = tf.nn.tanh(l[:, :, :, :, 2 * nr_mix:3 * nr_mix])
     # here and below: getting the means and adjusting them based on preceding
     # sub-pixels
@@ -116,36 +107,31 @@ def discretized_mix_logistic_loss(x, l, sum_all=True):
                                                             tf.where(cdf_delta > 1e-5, tf.log(tf.maximum(cdf_delta, 1e-12)), log_pdf_mid - np.log(127.5))))
 
     log_probs = tf.reduce_sum(log_probs, 3) + log_prob_from_logits(logit_probs)
-    if sum_all:
-        return -tf.reduce_sum(log_sum_exp(log_probs))
-    else:
-        return -tf.reduce_sum(log_sum_exp(log_probs), [1, 2])
+    return -tf.reduce_mean(tf.reduce_sum(log_sum_exp(log_probs), [1, 2]))
 
 
-def sample_from_discretized_mix_logistic(l, nr_mix, temp1 = 1.0, temp2 = 1.0):
-    # same as original openai code but with temperature parameters
+def sample_from_discretized_mix_logistic(l, nr_mix, temp1 = 1.0, temp2 = 1.0, mean = False):
+    if mean:
+        temp2 = 0.0
     ls = int_shape(l)
     xs = ls[:-1] + [3]
     # unpack parameters
     logit_probs = l[:, :, :, :nr_mix]
     l = tf.reshape(l[:, :, :, nr_mix:], xs + [nr_mix * 3])
     # sample mixture indicator from softmax
-    temp1 = tf.maximum(tf.convert_to_tensor(1e-5), tf.convert_to_tensor(temp1))
-    sel = tf.one_hot(tf.argmax(logit_probs/temp1 - tf.log(-tf.log(tf.random_uniform(
-        logit_probs.get_shape(), minval=1e-5, maxval=1. - 1e-5))), 3), depth=nr_mix, dtype=tf.float32)
+    if not mean:
+        if temp1 < 1e-5:
+            sel = tf.one_hot(tf.argmax(logit_probs, 3), depth=nr_mix, dtype=tf.float32)
+        else:
+            sel = tf.one_hot(tf.argmax(logit_probs/temp1 - tf.log(-tf.log(tf.random_uniform(
+                logit_probs.get_shape(), minval=1e-5, maxval=1. - 1e-5))), 3), depth=nr_mix, dtype=tf.float32)
+    else:
+        sel = tf.nn.softmax(logit_probs)
     sel = tf.reshape(sel, xs[:-1] + [1, nr_mix])
     # select logistic parameters
     means = tf.reduce_sum(l[:, :, :, :, :nr_mix] * sel, 4)
-    log_scales = l[:, :, :, :, nr_mix:2 * nr_mix]
-    #log_scales = l[:, :, :, :, nr_mix:2 * nr_mix] / 100.0
-    log_scales = tf.reduce_sum(
-        log_scales * sel, 4)
-    if zero_log_scales:
-        log_scales = tf.zeros_like(log_scales)
-    if tanh_log_scales:
-        log_scales = tf.nn.tanh(log_scales)
-    if softplus_scales:
-        log_scales = tf.log(tf.nn.softplus(0.001*log_scales - 3.0))
+    log_scales = tf.maximum(tf.reduce_sum(
+        l[:, :, :, :, nr_mix:2 * nr_mix] * sel, 4), -2.)
     coeffs = tf.reduce_sum(tf.nn.tanh(
         l[:, :, :, :, 2 * nr_mix:3 * nr_mix]) * sel, 4)
     # sample from logistic & clip to interval

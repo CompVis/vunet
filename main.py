@@ -119,12 +119,12 @@ class Model(object):
         return params
 
 
-    def sample(self, params):
-        return models.dec_sample(params)
+    def sample(self, params, **kwargs):
+        return nn.sample_from_discretized_mix_logistic(params, 10, **kwargs)
 
 
     def likelihood_loss(self, x, params):
-        return nn.likelihood_loss(x, params, "h1")
+        return nn.discretized_mix_logistic_loss(x, params)
 
 
     def define_graph(self):
@@ -138,7 +138,7 @@ class Model(object):
                 global_step,
                 self.lr_decay_begin, self.lr_decay_end // 2,
                 0.0, 1.0,
-                1e-5, 1.0)
+                1e-1, 1.0)
 
         # initialization
         self.x_init = tf.placeholder(
@@ -166,7 +166,9 @@ class Model(object):
             loss += kl_weight * models.latent_kl(q, p)
 
         # testing
-        test_sample = self.sample(self.test_forward_pass(self.c))
+        test_forward = self.test_forward_pass(self.c)
+        test_sample = self.sample(test_forward)
+        test_mean_sample = self.sample(test_forward, mean = True)
 
         # optimization
         optimizer = tf.train.AdamOptimizer(learning_rate = lr, beta1 = 0.5, beta2 = 0.9)
@@ -183,6 +185,7 @@ class Model(object):
         self.img_ops = dict()
         self.img_ops["sample"] = sample
         self.img_ops["test_sample"] = test_sample
+        self.img_ops["test_mean_sample"] = test_mean_sample
         self.img_ops["x"] = self.x
         self.img_ops["c"] = self.c
 
@@ -304,7 +307,12 @@ class Model(object):
     def test(self, c_batch):
         results = dict()
         results["cond"] = c_batch
-        results["test_sample"] = session.run(self.img_ops["test_sample"], {self.c: c_batch})
+        sample, mean_sample = session.run([
+            self.img_ops["test_sample"],
+            self.img_ops["test_mean_sample"]],
+            {self.c: c_batch})
+        results["test_sample"] = sample
+        results["test_mean_sample"] = mean_sample
         return results
 
 

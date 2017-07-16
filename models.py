@@ -22,7 +22,7 @@ def make_model(name, template, **kwargs):
 
 def dec_up(
         c, init = False, dropout_p = 0.5,
-        n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 256):
+        n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 128):
     with model_arg_scope(
             init = init, dropout_p = dropout_p, activation = activation):
         # outputs
@@ -95,7 +95,7 @@ def dec_down(
 
 def enc_up(
         x, c, init = False, dropout_p = 0.5,
-        n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 256):
+        n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 128):
     with model_arg_scope(
             init = init, dropout_p = dropout_p, activation = activation):
         # outputs
@@ -162,7 +162,8 @@ def enc_down(
 def dec_parameters(
         h, init = False, **kwargs):
     with model_arg_scope(init = init):
-        num_filters = 3
+        nm = 10
+        num_filters = 10*nm
         return nn.conv2d(h, num_filters)
 
 
