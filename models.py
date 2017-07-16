@@ -43,7 +43,8 @@ def dec_up(
 
 def dec_down(
         gs, zs_posterior, training, init = False, dropout_p = 0.5,
-        n_scales = 1, n_residual_blocks = 2, activation = "elu"):
+        n_scales = 1, n_residual_blocks = 2, activation = "elu",
+        n_prescales = 2):
     assert n_residual_blocks % 2 == 0
     gs = list(gs)
     zs_posterior = list(zs_posterior)
@@ -62,25 +63,30 @@ def dec_down(
             for i in range(n_residual_blocks // 2):
                 h = nn.residual_block(h, gs.pop())
                 hs.append(h)
-            ## prior
-            p = latent_parameters(h)
-            ps.append(p)
-            ## prior sample
-            z_prior = latent_sample(p)
-            zs.append(z_prior)
-            ## feedback sampled from
-            if training:
-                ## posterior
-                z = zs_posterior.pop(0)
-            else:
+            if l >= n_prescales:
                 ## prior
-                z = z_prior
-            for i in range(n_residual_blocks // 2):
-                n_h_channels = h.shape.as_list()[-1]
-                h = tf.concat([h, z], axis = -1)
-                h = nn.nin(h, n_h_channels)
-                h = nn.residual_block(h, gs.pop())
-                hs.append(h)
+                p = latent_parameters(h)
+                ps.append(p)
+                ## prior sample
+                z_prior = latent_sample(p)
+                zs.append(z_prior)
+                ## feedback sampled from
+                if training:
+                    ## posterior
+                    z = zs_posterior.pop(0)
+                else:
+                    ## prior
+                    z = z_prior
+                for i in range(n_residual_blocks // 2):
+                    n_h_channels = h.shape.as_list()[-1]
+                    h = tf.concat([h, z], axis = -1)
+                    h = nn.nin(h, n_h_channels)
+                    h = nn.residual_block(h, gs.pop())
+                    hs.append(h)
+            else:
+                for i in range(n_residual_blocks // 2):
+                    h = nn.residual_block(h, gs.pop())
+                    hs.append(h)
             # prepare input to next level
             if l + 1 < n_scales:
                 n_filters = gs[-1].shape.as_list()[-1]
@@ -117,7 +123,8 @@ def enc_up(
 
 def enc_down(
         gs, init = False, dropout_p = 0.5,
-        n_scales = 1, n_residual_blocks = 2, activation = "elu"):
+        n_scales = 1, n_residual_blocks = 2, activation = "elu",
+        n_prescales = 2):
     assert n_residual_blocks % 2 == 0
     gs = list(gs)
     with model_arg_scope(
@@ -135,17 +142,22 @@ def enc_down(
             for i in range(n_residual_blocks // 2):
                 h = nn.residual_block(h, gs.pop())
                 hs.append(h)
-            ## posterior parameters
-            q = latent_parameters(h)
-            qs.append(q)
-            ## posterior sample
-            z = latent_sample(q)
-            zs.append(z)
-            ## sample feedback
-            for i in range(n_residual_blocks // 2):
-                gz = tf.concat([gs.pop(), z], axis = -1)
-                h = nn.residual_block(h, gz)
-                hs.append(h)
+            if l >= n_prescales:
+                ## posterior parameters
+                q = latent_parameters(h)
+                qs.append(q)
+                ## posterior sample
+                z = latent_sample(q)
+                zs.append(z)
+                ## sample feedback
+                for i in range(n_residual_blocks // 2):
+                    gz = tf.concat([gs.pop(), z], axis = -1)
+                    h = nn.residual_block(h, gz)
+                    hs.append(h)
+            else:
+                for i in range(n_residual_blocks // 2):
+                    h = nn.residual_block(h, gs.pop())
+                    hs.append(h)
             # prepare input to next level
             if l + 1 < n_scales:
                 n_filters = gs[-1].shape.as_list()[-1]

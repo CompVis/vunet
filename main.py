@@ -161,9 +161,11 @@ class Model(object):
         # sample from model distribution
         sample = self.sample(params)
         # maximize likelihood
-        loss = self.likelihood_loss(self.x, params)
+        likelihood_loss = self.likelihood_loss(self.x, params)
+        kl_loss = tf.to_float(0.0)
         for q, p in zip(qs, ps):
-            loss += kl_weight * models.latent_kl(q, p)
+            kl_loss += models.latent_kl(q, p)
+        loss = likelihood_loss + kl_weight * kl_loss
 
         # testing
         test_forward = self.test_forward_pass(self.c)
@@ -180,6 +182,8 @@ class Model(object):
         # logging and visualization
         self.log_ops = dict()
         self.log_ops["global_step"] = global_step
+        self.log_ops["likelihood_loss"] = likelihood_loss
+        self.log_ops["kl_loss"] = kl_loss
         self.log_ops["kl_weight"] = kl_weight
         self.log_ops["loss"] = loss
         self.img_ops = dict()
