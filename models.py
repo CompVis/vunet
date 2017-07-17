@@ -63,7 +63,7 @@ def dec_down(
             for i in range(n_residual_blocks // 2):
                 h = nn.residual_block(h, gs.pop())
                 hs.append(h)
-            if l >= n_prescales:
+            if l < n_prescales:
                 ## prior
                 p = latent_parameters(h)
                 ps.append(p)
@@ -142,7 +142,7 @@ def enc_down(
             for i in range(n_residual_blocks // 2):
                 h = nn.residual_block(h, gs.pop())
                 hs.append(h)
-            if l >= n_prescales:
+            if l < n_prescales:
                 ## posterior parameters
                 q = latent_parameters(h)
                 qs.append(q)

@@ -81,18 +81,21 @@ class Model(object):
 
 
     def define_models(self):
+        n_prescales = 3
         self.enc_up_pass = models.make_model(
                 "enc_up", models.enc_up,
                 n_scales = self.n_scales)
         self.enc_down_pass = models.make_model(
                 "enc_down", models.enc_down,
-                n_scales = self.n_scales)
+                n_scales = self.n_scales,
+                n_prescales = n_prescales)
         self.dec_up_pass = models.make_model(
                 "dec_up", models.dec_up,
                 n_scales = self.n_scales)
         self.dec_down_pass = models.make_model(
                 "dec_down", models.dec_down,
-                n_scales = self.n_scales)
+                n_scales = self.n_scales,
+                n_prescales = n_prescales)
         self.dec_params = models.make_model(
                 "dec_params", models.dec_parameters)
 
@@ -138,7 +141,7 @@ class Model(object):
                 global_step,
                 self.lr_decay_begin, self.lr_decay_end // 2,
                 0.0, 1.0,
-                1e-1, 1.0)
+                1.0, 1.0)
 
         # initialization
         self.x_init = tf.placeholder(
@@ -160,10 +163,12 @@ class Model(object):
         params, qs, ps, activations = self.train_forward_pass(self.x, self.c, dropout_p = self.dropout_p)
         # sample from model distribution
         sample = self.sample(params)
+        mean_sample = self.sample(params, mean = True)
         # maximize likelihood
         likelihood_loss = self.likelihood_loss(self.x, params)
         kl_loss = tf.to_float(0.0)
         for q, p in zip(qs, ps):
+            self.logger.info("Latent shape: {}".format(q.shape.as_list()))
             kl_loss += models.latent_kl(q, p)
         loss = likelihood_loss + kl_weight * kl_loss
 
@@ -175,9 +180,9 @@ class Model(object):
         # optimization
         optimizer = tf.train.AdamOptimizer(learning_rate = lr, beta1 = 0.5, beta2 = 0.9)
         opt_op = optimizer.minimize(loss, var_list = tf.trainable_variables())
-        self.train_op = opt_op
-        with tf.control_dependencies([self.train_op]):
+        with tf.control_dependencies([opt_op]):
             self.train_op = tf.assign(global_step, global_step + 1)
+
 
         # logging and visualization
         self.log_ops = dict()
@@ -188,6 +193,7 @@ class Model(object):
         self.log_ops["loss"] = loss
         self.img_ops = dict()
         self.img_ops["sample"] = sample
+        self.img_ops["mean_sample"] = mean_sample
         self.img_ops["test_sample"] = test_sample
         self.img_ops["test_mean_sample"] = test_mean_sample
         self.img_ops["x"] = self.x
@@ -251,7 +257,8 @@ class Model(object):
             self.writer.add_summary(result["summary"], global_step)
             self.writer.flush()
         if "log" in result:
-            for k, v in result["log"].items():
+            for k in sorted(result["log"]):
+                v = result["log"][k]
                 self.logger.info("{}: {}".format(k, v))
         if "img" in result:
             for k, v in result["img"].items():
