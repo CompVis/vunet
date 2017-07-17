@@ -65,12 +65,43 @@ def dec_down(
                 hs.append(h)
             if l < n_prescales:
                 ## prior
-                p = latent_parameters(h)
-                ps.append(p)
-                ## prior sample
-                z_prior = latent_sample(p)
-                zs.append(z_prior)
-                ## feedback sampled from
+                spatial_shape = h.shape.as_list()[1]
+                n_h_channels = h.shape.as_list()[-1]
+                if spatial_shape == 1:
+                    ### no spatial correlations
+                    p = latent_parameters(h)
+                    ps.append(p)
+                    z_prior = latent_sample(p)
+                    zs.append(z_prior)
+                else:
+                    ### four autoregressively modeled groups
+                    if training:
+                        z_posterior_groups = nn.split_groups(zs_posterior[0])
+                    p_groups = []
+                    z_groups = []
+                    p_features = tf.space_to_depth(nn.residual_block(h), 2)
+                    for i in range(4):
+                        p_group = latent_parameters(p_features, num_filters = n_h_channels)
+                        p_groups.append(p_group)
+                        z_group = latent_sample(p_group)
+                        z_groups.append(z_group)
+                        # ar feedback sampled from
+                        if training:
+                            feedback = z_posterior_groups.pop(0)
+                        else:
+                            feedback = z_group
+                        # prepare input for next group
+                        if i + 1 < 4:
+                            p_features = nn.residual_block(p_features, feedback)
+                    if training:
+                        assert not z_posterior_groups
+                    # complete prior parameters
+                    p = nn.merge_groups(p_groups)
+                    ps.append(p)
+                    # complete prior sample
+                    z_prior = nn.merge_groups(z_groups)
+                    zs.append(z_prior)
+                ## vae feedback sampled from
                 if training:
                     ## posterior
                     z = zs_posterior.pop(0)
@@ -155,15 +186,18 @@ def enc_down(
                     h = nn.residual_block(h, gz)
                     hs.append(h)
             else:
+                """ no need to go down any further
                 for i in range(n_residual_blocks // 2):
                     h = nn.residual_block(h, gs.pop())
                     hs.append(h)
+                """
+                break
             # prepare input to next level
             if l + 1 < n_scales:
                 n_filters = gs[-1].shape.as_list()[-1]
                 h = nn.upsample(h, n_filters)
 
-        assert not gs
+        #assert not gs # not true anymore since we break out of the loop
 
         return hs, qs, zs
 
@@ -185,7 +219,7 @@ def dec_sample(p):
 
 def latent_parameters(
         h, init = False, **kwargs):
-    num_filters = h.shape.as_list()[-1]
+    num_filters = kwargs.get("num_filters", h.shape.as_list()[-1])
     return nn.conv2d(h, 2*num_filters)
 
 

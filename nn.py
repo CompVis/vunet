@@ -484,3 +484,11 @@ def likelihood_loss(target, tail_decoding, loss):
     else:
         raise NotImplemented("Unknown loss function: {}".format(loss))
     return rec_loss
+
+
+def split_groups(x, bs = 2):
+    return tf.split(tf.space_to_depth(x, bs), bs**2, axis = 3)
+
+
+def merge_groups(xs, bs = 2):
+    return tf.depth_to_space(tf.concat(xs, axis = 3), bs)
