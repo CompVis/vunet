@@ -64,7 +64,7 @@ def discretized_mix_logistic_loss(x, l, sum_all=True):
     logit_probs = l[:, :, :, :nr_mix]
     l = tf.reshape(l[:, :, :, nr_mix:], xs + [nr_mix * 3])
     means = l[:, :, :, :, :nr_mix]
-    log_scales = tf.maximum(l[:, :, :, :, nr_mix:2 * nr_mix], -2.)
+    log_scales = tf.clip_by_value(l[:, :, :, :, nr_mix:2 * nr_mix], -7, 7)
     coeffs = tf.nn.tanh(l[:, :, :, :, 2 * nr_mix:3 * nr_mix])
     # here and below: getting the means and adjusting them based on preceding
     # sub-pixels
@@ -130,8 +130,8 @@ def sample_from_discretized_mix_logistic(l, nr_mix, temp1 = 1.0, temp2 = 1.0, me
     sel = tf.reshape(sel, xs[:-1] + [1, nr_mix])
     # select logistic parameters
     means = tf.reduce_sum(l[:, :, :, :, :nr_mix] * sel, 4)
-    log_scales = tf.maximum(tf.reduce_sum(
-        l[:, :, :, :, nr_mix:2 * nr_mix] * sel, 4), -2.)
+    log_scales = tf.clip_by_value(tf.reduce_sum(
+        l[:, :, :, :, nr_mix:2 * nr_mix] * sel, 4), -7, 7)
     coeffs = tf.reduce_sum(tf.nn.tanh(
         l[:, :, :, :, 2 * nr_mix:3 * nr_mix]) * sel, 4)
     # sample from logistic & clip to interval

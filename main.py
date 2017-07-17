@@ -81,7 +81,7 @@ class Model(object):
 
 
     def define_models(self):
-        n_prescales = 3
+        n_prescales = 4
         self.enc_up_pass = models.make_model(
                 "enc_up", models.enc_up,
                 n_scales = self.n_scales)
@@ -102,6 +102,7 @@ class Model(object):
 
     def train_forward_pass(self, x, c, dropout_p, init = False):
         kwargs = {"init": init, "dropout_p": dropout_p}
+        x = x + np.exp(-2.0) * tf.random_normal(x.shape)
         # encoder
         hs = self.enc_up_pass(x, c, **kwargs)
         es, qs, zs_posterior = self.enc_down_pass(hs, **kwargs)
@@ -164,6 +165,7 @@ class Model(object):
         # sample from model distribution
         sample = self.sample(params)
         mean_sample = self.sample(params, mean = True)
+        map_sample = self.sample(params, temp1 = 1.0, temp2 = 0.0)
         # maximize likelihood
         likelihood_loss = self.likelihood_loss(self.x, params)
         kl_loss = tf.to_float(0.0)
@@ -176,6 +178,7 @@ class Model(object):
         test_forward = self.test_forward_pass(self.c)
         test_sample = self.sample(test_forward)
         test_mean_sample = self.sample(test_forward, mean = True)
+        test_map_sample = self.sample(test_forward, temp1 = 1.0, temp2 = 0.0)
 
         # optimization
         optimizer = tf.train.AdamOptimizer(learning_rate = lr, beta1 = 0.5, beta2 = 0.9)
@@ -194,9 +197,12 @@ class Model(object):
         self.img_ops = dict()
         self.img_ops["sample"] = sample
         self.img_ops["mean_sample"] = mean_sample
+        self.img_ops["map_sample"] = map_sample
         self.img_ops["test_sample"] = test_sample
         self.img_ops["test_mean_sample"] = test_mean_sample
+        self.img_ops["test_map_sample"] = test_map_sample
         self.img_ops["x"] = self.x
+        self.img_ops["x_corrupted"] = self.x + np.exp(-2.0)*tf.random_normal(self.x.shape)
         self.img_ops["c"] = self.c
 
         # keep seperate train and validation summaries
@@ -327,24 +333,39 @@ class Model(object):
         return results
 
 
+    def mcmc(self, c_batch, n_iters = 25):
+        results = dict()
+        results["cond"] = c_batch
+        sample = session.run(
+            self.img_ops["test_mean_sample"], {self.c: c_batch})
+        results["sample_{}".format(0)] = sample
+        for i in range(n_iters - 1):
+            sample = session.run(
+                    self.img_ops["mean_sample"], {
+                        self.x: sample,
+                        self.c: c_batch})
+            results["sample_{:03}".format(i+1)] = sample
+        return results
+
+
 if __name__ == "__main__":
     default_log_dir = os.path.join(os.getcwd(), "log")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_index", required = True, help = "path to training or testing data index")
-    parser.add_argument("--mode", default = "train", choices=["train", "test"])
+    parser.add_argument("--mode", default = "train", choices=["train", "test", "mcmc"])
     parser.add_argument("--log_dir", default = default_log_dir, help = "path to log into")
     parser.add_argument("--batch_size", default = 16, type = int, help = "batch size")
-    parser.add_argument("--init_batches", default = 8, type = int, help = "number of batches for initialization")
+    parser.add_argument("--init_batches", default = 4, type = int, help = "number of batches for initialization")
     parser.add_argument("--checkpoint", help = "path to checkpoint to restore")
-    parser.add_argument("--spatial_size", default = 32, type = int, help = "spatial size to resize images to")
+    parser.add_argument("--spatial_size", default = 128, type = int, help = "spatial size to resize images to")
     parser.add_argument("--lr", default = 1e-3, type = float, help = "initial learning rate")
     parser.add_argument("--lr_decay_begin", default = 1000, type = int, help = "steps after which to begin linear lr decay")
     parser.add_argument("--lr_decay_end", default = 100000, type = int, help = "step at which lr is zero, i.e. number of training steps")
     parser.add_argument("--log_freq", default = 250, type = int, help = "frequency to log")
     parser.add_argument("--ckpt_freq", default = 1000, type = int, help = "frequency to checkpoint")
     parser.add_argument("--test_freq", default = 1000, type = int, help = "frequency to test")
-    parser.add_argument("--n_scales", default = 3, type = int, help = "Number of scales")
+    parser.add_argument("--n_scales", default = 8, type = int, help = "Number of scales")
     parser.add_argument("--drop_prob", default = 0.5, type = float, help = "Dropout probability")
     parser.add_argument("--mask", dest = "mask", action = "store_true", help = "Use masked data")
     parser.add_argument("--no-mask", dest = "mask", action = "store_false", help = "Do not use mask")
@@ -394,5 +415,22 @@ if __name__ == "__main__":
                 plot_batch(x_gen[k], os.path.join(
                     out_dir,
                     "testing_{}_{:07}.png".format(k, i)))
+    elif opt.mode == "mcmc":
+        if not opt.checkpoint:
+            raise Exception("Testing requires --checkpoint")
+        batch_size = opt.batch_size
+        img_shape = 2*[opt.spatial_size] + [3]
+        data_shape = [batch_size] + img_shape
+        valid_batches = get_batches(data_shape, opt.data_index, mask = opt.mask, train = False)
+        model = Model(opt, out_dir, logger)
+        model.restore_graph(opt.checkpoint)
+
+        for i in trange(valid_batches.n // batch_size):
+            X_batch, C_batch = next(valid_batches)
+            x_gen = model.mcmc(C_batch)
+            for k in x_gen:
+                plot_batch(x_gen[k], os.path.join(
+                    out_dir,
+                    "mcmc_{}_{:07}.png".format(k, i)))
     else:
         raise NotImplemented()
