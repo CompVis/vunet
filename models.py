@@ -224,7 +224,8 @@ def latent_parameters(
 
 
 def logvarvar(u):
-    logvar = tf.clip_by_value(u, -7, 7)
+    cutoff = tf.to_float(-5)
+    logvar = tf.maximum(cutoff, u)
     var = tf.exp(logvar)
     return logvar, var
 
