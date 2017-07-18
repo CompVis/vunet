@@ -81,21 +81,21 @@ class Model(object):
 
 
     def define_models(self):
-        n_prescales = 4
+        n_latent_scales = 2
         self.enc_up_pass = models.make_model(
                 "enc_up", models.enc_up,
                 n_scales = self.n_scales)
         self.enc_down_pass = models.make_model(
                 "enc_down", models.enc_down,
                 n_scales = self.n_scales,
-                n_prescales = n_prescales)
+                n_latent_scales = n_latent_scales)
         self.dec_up_pass = models.make_model(
                 "dec_up", models.dec_up,
                 n_scales = self.n_scales)
         self.dec_down_pass = models.make_model(
                 "dec_down", models.dec_down,
                 n_scales = self.n_scales,
-                n_prescales = n_prescales)
+                n_latent_scales = n_latent_scales)
         self.dec_params = models.make_model(
                 "dec_params", models.dec_parameters)
 
@@ -333,7 +333,7 @@ class Model(object):
         return results
 
 
-    def mcmc(self, c_batch, n_iters = 25):
+    def mcmc(self, c_batch, n_iters = 10):
         results = dict()
         results["cond"] = c_batch
         sample = session.run(

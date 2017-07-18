@@ -44,7 +44,7 @@ def dec_up(
 def dec_down(
         gs, zs_posterior, training, init = False, dropout_p = 0.5,
         n_scales = 1, n_residual_blocks = 2, activation = "elu",
-        n_prescales = 2):
+        n_latent_scales = 2):
     assert n_residual_blocks % 2 == 0
     gs = list(gs)
     zs_posterior = list(zs_posterior)
@@ -63,7 +63,7 @@ def dec_down(
             for i in range(n_residual_blocks // 2):
                 h = nn.residual_block(h, gs.pop())
                 hs.append(h)
-            if l < n_prescales:
+            if l < n_latent_scales:
                 ## prior
                 spatial_shape = h.shape.as_list()[1]
                 n_h_channels = h.shape.as_list()[-1]
@@ -155,7 +155,7 @@ def enc_up(
 def enc_down(
         gs, init = False, dropout_p = 0.5,
         n_scales = 1, n_residual_blocks = 2, activation = "elu",
-        n_prescales = 2):
+        n_latent_scales = 2):
     assert n_residual_blocks % 2 == 0
     gs = list(gs)
     with model_arg_scope(
@@ -173,7 +173,7 @@ def enc_down(
             for i in range(n_residual_blocks // 2):
                 h = nn.residual_block(h, gs.pop())
                 hs.append(h)
-            if l < n_prescales:
+            if l < n_latent_scales:
                 ## posterior parameters
                 q = latent_parameters(h)
                 qs.append(q)
