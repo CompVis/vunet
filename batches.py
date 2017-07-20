@@ -260,7 +260,8 @@ class IndexFlow(object):
             train,
             mask = True,
             fill_batches = True,
-            shuffle = True):
+            shuffle = True,
+            return_index_id = False):
         self.shape = shape
         self.batch_size = self.shape[0]
         self.img_shape = self.shape[1:]
@@ -271,15 +272,16 @@ class IndexFlow(object):
         self.mask = mask
         self.fill_batches = fill_batches
         self.shuffle_ = shuffle
+        self.return_index_id = return_index_id
 
         self.jo = self.index["joint_order"]
-        ks = ["imgs", "joints"]
-        for k in ks:
-            self.index[k] = [v for i, v in enumerate(self.index[k]) if self.index["train"][i] == self.train]
+        self.indices = np.array(
+                [i for i in range(len(self.index["train"]))
+                    if self.index["train"][i] == self.train])
         # rescale joint coordinates to image shape
         self.index["joints"] = [v * self.img_shape[0] / 256 for v in self.index["joints"]]
 
-        self.n = len(self.index["joints"])
+        self.n = self.indices.shape[0]
         self.shuffle()
 
 
@@ -290,6 +292,7 @@ class IndexFlow(object):
             n_missing = self.batch_size - batch_indices.shape[0]
             batch_indices = np.concatenate([batch_indices, self.indices[:n_missing]], axis = 0)
             assert(batch_indices.shape[0] == self.batch_size)
+        batch_indices = np.array(batch_indices)
 
         keys = ["imgs", "joints"]
         batch = dict()
@@ -331,15 +334,16 @@ class IndexFlow(object):
             batch["imgs"] = batch["imgs"] * batch["masks"]
         batch["joints"] = preprocess(batch["joints"])
 
-        return batch["imgs"], batch["joints"]
+        if self.return_index_id:
+            return batch["imgs"], batch["joints"], batch_indices
+        else:
+            return batch["imgs"], batch["joints"]
 
 
     def shuffle(self):
         self.batch_start = 0
         if self.shuffle_:
-            self.indices = np.random.permutation(self.n)
-        else:
-            self.indices = np.arange(self.n)
+            np.random.shuffle(self.indices)
 
 
 def get_batches(
@@ -348,9 +352,10 @@ def get_batches(
         train,
         mask,
         fill_batches = True,
-        shuffle = True):
+        shuffle = True,
+        return_index_id = False):
     """Buffered IndexFlow."""
-    flow = IndexFlow(shape, index_path, train, mask, fill_batches, shuffle)
+    flow = IndexFlow(shape, index_path, train, mask, fill_batches, shuffle, return_index_id)
     return BufferedWrapper(flow)
 
 

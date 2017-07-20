@@ -3,15 +3,16 @@ config = tf.ConfigProto()
 config.gpu_options.allow_growth = False
 session = tf.Session(config = config)
 
-import os, logging, shutil, datetime, time, math
+import os, logging, shutil, datetime, time, math, pickle
 import glob
 import argparse
 import numpy as np
 from tqdm import tqdm, trange
+import PIL
 
 import nn
 import models
-from batches import get_batches, plot_batch
+from batches import get_batches, plot_batch, postprocess
 
 
 def init_logging(out_base_dir):
@@ -179,6 +180,10 @@ class Model(object):
         test_sample = self.sample(test_forward)
         test_mean_sample = self.sample(test_forward, mean = True)
         test_map_sample = self.sample(test_forward, temp1 = 1.0, temp2 = 0.0)
+
+        # reconstruction
+        reconstruction_params, _, _, _ = self.train_forward_pass(self.x, self.c, dropout_p = 0.0)
+        self.reconstruction = self.sample(reconstruction_params, mean = True)
 
         # optimization
         optimizer = tf.train.AdamOptimizer(learning_rate = lr, beta1 = 0.5, beta2 = 0.9)
@@ -348,12 +353,18 @@ class Model(object):
         return results
 
 
+    def reconstruct(self, x_batch, c_batch):
+        return session.run(
+                self.reconstruction,
+                {self.x: x_batch, self.c: c_batch})
+
+
 if __name__ == "__main__":
     default_log_dir = os.path.join(os.getcwd(), "log")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_index", required = True, help = "path to training or testing data index")
-    parser.add_argument("--mode", default = "train", choices=["train", "test", "mcmc"])
+    parser.add_argument("--mode", default = "train", choices=["train", "test", "mcmc", "add_reconstructions"])
     parser.add_argument("--log_dir", default = default_log_dir, help = "path to log into")
     parser.add_argument("--batch_size", default = 16, type = int, help = "batch size")
     parser.add_argument("--init_batches", default = 4, type = int, help = "number of batches for initialization")
@@ -415,6 +426,54 @@ if __name__ == "__main__":
                 plot_batch(x_gen[k], os.path.join(
                     out_dir,
                     "testing_{}_{:07}.png".format(k, i)))
+    elif opt.mode == "add_reconstructions":
+        if not opt.checkpoint:
+            raise Exception("Testing requires --checkpoint")
+        batch_size = opt.batch_size
+        img_shape = 2*[opt.spatial_size] + [3]
+        data_shape = [batch_size] + img_shape
+        batches = get_batches(data_shape, opt.data_index, mask = opt.mask,
+                train = True, return_index_id = True)
+        valid_batches = get_batches(data_shape, opt.data_index,
+                mask = opt.mask, train = False, return_index_id = True)
+        model = Model(opt, out_dir, logger)
+        model.restore_graph(opt.checkpoint)
+
+        # open index file to get image filenames and update with
+        # reconstruction data
+        with open(opt.data_index, "rb") as f:
+            index = pickle.load(f)
+        index_dir = os.path.dirname(opt.data_index)
+        index["reconstruction"] = len(index["imgs"]) * [None]
+        index["sample"] = len(index["imgs"]) * [None]
+
+        def process_batches(batches):
+            for i in trange(batches.n // batch_size):
+                X_batch, C_batch, I_batch = next(batches)
+                # reconstructions
+                R_batch = model.reconstruct(X_batch, C_batch)
+                R_batch = postprocess(R_batch) # to uint8 for saving
+                # samples from pose
+                S_batch = model.test(C_batch)["test_mean_sample"]
+                S_batch = postprocess(S_batch) # to uint8 for saving
+                for batch_i, i in enumerate(I_batch):
+                    original_fname = index["imgs"][i]
+                    reconstr_fname = original_fname.rsplit(".", 1)[0] + "_reconstruction.png"
+                    reconstr_path = os.path.join(index_dir, reconstr_fname)
+                    sample_fname = original_fname.rsplit(".", 1)[0] + "_sample.png"
+                    sample_path = os.path.join(index_dir, sample_fname)
+                    index["reconstruction"][i] = reconstr_path
+                    index["sample"][i] = sample_path
+                    PIL.Image.fromarray(R_batch[batch_i,...]).save(reconstr_path)
+                    PIL.Image.fromarray(S_batch[batch_i,...]).save(sample_path)
+        process_batches(batches)
+        process_batches(valid_batches)
+
+        # write updated index
+        with open(opt.data_index, "wb") as f:
+            pickle.dump(index, f)
+        logger.info("Wrote {}".format(opt.data_index))
+
     elif opt.mode == "mcmc":
         if not opt.checkpoint:
             raise Exception("Testing requires --checkpoint")
