@@ -448,7 +448,7 @@ if __name__ == "__main__":
         index["sample"] = len(index["imgs"]) * [None]
 
         def process_batches(batches):
-            for i in trange(batches.n // batch_size):
+            for i in trange(math.ceil(batches.n / batch_size)):
                 X_batch, C_batch, I_batch = next(batches)
                 # reconstructions
                 R_batch = model.reconstruct(X_batch, C_batch)
