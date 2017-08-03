@@ -124,6 +124,18 @@ class Model(object):
         return params
 
 
+    def transfer_pass(self, infer_x, infer_c, generate_c):
+        kwargs = {"init": False, "dropout_p": 0.0}
+        # infer latent code
+        hs = self.enc_up_pass(infer_x, infer_c, **kwargs)
+        es, qs, zs_posterior = self.enc_down_pass(hs, **kwargs)
+        # generate from inferred latent code and conditioning
+        gs = self.dec_up_pass(generate_c, **kwargs)
+        ds, ps, zs_prior = self.dec_down_pass(gs, zs_posterior, training = True, **kwargs)
+        params = self.dec_params(ds[-1], **kwargs)
+        return params
+
+
     def sample(self, params, **kwargs):
         return nn.sample_from_discretized_mix_logistic(params, 10, **kwargs)
 
@@ -181,6 +193,16 @@ class Model(object):
         test_mean_sample = self.sample(test_forward, mean = True)
         test_map_sample = self.sample(test_forward, temp1 = 1.0, temp2 = 0.0)
 
+        # transfer
+        self.c_generator = tf.placeholder(
+                tf.float32,
+                shape = [self.batch_size] + self.img_shape)
+        infer_x = self.x
+        infer_c = self.c
+        generate_c = self.c_generator
+        transfer_params = self.transfer_pass(infer_x, infer_c, generate_c)
+        transfer_mean_sample = self.sample(transfer_params, mean = True)
+
         # reconstruction
         reconstruction_params, _, _, _ = self.train_forward_pass(self.x, self.c, dropout_p = 0.0)
         self.reconstruction = self.sample(reconstruction_params, mean = True)
@@ -209,6 +231,7 @@ class Model(object):
         self.img_ops["x"] = self.x
         self.img_ops["x_corrupted"] = self.x + np.exp(-2.0)*tf.random_normal(self.x.shape)
         self.img_ops["c"] = self.c
+        self.img_ops["transfer"] = transfer_mean_sample
 
         # keep seperate train and validation summaries
         # only training summary contains histograms
@@ -359,12 +382,21 @@ class Model(object):
                 {self.x: x_batch, self.c: c_batch})
 
 
+    def transfer(self, x_encode, c_encode, c_decode):
+        return session.run(
+                self.img_ops["transfer"], {
+                    self.x: x_encode,
+                    self.c: c_encode,
+                    self.c_generator: c_decode})
+
+
 if __name__ == "__main__":
     default_log_dir = os.path.join(os.getcwd(), "log")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_index", required = True, help = "path to training or testing data index")
-    parser.add_argument("--mode", default = "train", choices=["train", "test", "mcmc", "add_reconstructions"])
+    parser.add_argument("--mode", default = "train",
+            choices=["train", "test", "mcmc", "add_reconstructions", "transfer"])
     parser.add_argument("--log_dir", default = default_log_dir, help = "path to log into")
     parser.add_argument("--batch_size", default = 16, type = int, help = "batch size")
     parser.add_argument("--init_batches", default = 4, type = int, help = "number of batches for initialization")
@@ -473,6 +505,40 @@ if __name__ == "__main__":
         with open(opt.data_index, "wb") as f:
             pickle.dump(index, f)
         logger.info("Wrote {}".format(opt.data_index))
+
+    elif opt.mode == "transfer":
+        if not opt.checkpoint:
+            raise Exception("Testing requires --checkpoint")
+        batch_size = opt.batch_size
+        img_shape = 2*[opt.spatial_size] + [3]
+        data_shape = [batch_size] + img_shape
+        valid_batches = get_batches(data_shape, opt.data_index,
+                mask = opt.mask, train = False)
+        model = Model(opt, out_dir, logger)
+        model.restore_graph(opt.checkpoint)
+
+        for step in trange(1):
+            X_batch, C_batch = next(valid_batches)
+            bs = X_batch.shape[0]
+            imgs = list()
+            imgs.append(np.zeros_like(X_batch[0,...]))
+            for r in range(bs):
+                imgs.append(C_batch[r,...])
+            for i in range(bs):
+                x_infer = X_batch[i,...]
+                c_infer = C_batch[i,...]
+                imgs.append(x_infer)
+
+                x_infer_batch = x_infer[None,...].repeat(bs, axis = 0)
+                c_infer_batch = c_infer[None,...].repeat(bs, axis = 0)
+                c_generate_batch = C_batch
+                results = model.transfer(x_infer_batch, c_infer_batch, c_generate_batch)
+                for j in range(bs):
+                    imgs.append(results[j,...])
+            imgs = np.stack(imgs, axis = 0)
+            plot_batch(imgs, os.path.join(
+                out_dir,
+                "transfer.png"))
 
     elif opt.mode == "mcmc":
         if not opt.checkpoint:
