@@ -193,16 +193,6 @@ class Model(object):
         test_mean_sample = self.sample(test_forward, mean = True)
         test_map_sample = self.sample(test_forward, temp1 = 1.0, temp2 = 0.0)
 
-        # transfer
-        self.c_generator = tf.placeholder(
-                tf.float32,
-                shape = [self.batch_size] + self.img_shape)
-        infer_x = self.x
-        infer_c = self.c
-        generate_c = self.c_generator
-        transfer_params = self.transfer_pass(infer_x, infer_c, generate_c)
-        transfer_mean_sample = self.sample(transfer_params, mean = True)
-
         # reconstruction
         reconstruction_params, _, _, _ = self.train_forward_pass(self.x, self.c, dropout_p = 0.0)
         self.reconstruction = self.sample(reconstruction_params, mean = True)
@@ -231,7 +221,6 @@ class Model(object):
         self.img_ops["x"] = self.x
         self.img_ops["x_corrupted"] = self.x + np.exp(-2.0)*tf.random_normal(self.x.shape)
         self.img_ops["c"] = self.c
-        self.img_ops["transfer"] = transfer_mean_sample
 
         # keep seperate train and validation summaries
         # only training summary contains histograms
@@ -383,6 +372,20 @@ class Model(object):
 
 
     def transfer(self, x_encode, c_encode, c_decode):
+        initialized = getattr(self, "_init_transfer", False)
+        if not initialized:
+            # transfer
+            self.c_generator = tf.placeholder(
+                    tf.float32,
+                    shape = [self.batch_size] + self.img_shape)
+            infer_x = self.x
+            infer_c = self.c
+            generate_c = self.c_generator
+            transfer_params = self.transfer_pass(infer_x, infer_c, generate_c)
+            transfer_mean_sample = self.sample(transfer_params, mean = True)
+            self.img_ops["transfer"] = transfer_mean_sample
+            self._init_transfer = True
+
         return session.run(
                 self.img_ops["transfer"], {
                     self.x: x_encode,
