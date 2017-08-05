@@ -103,13 +103,14 @@ def plot_batch(X, out_path):
 
 def make_joint_img(img_shape, jo, joints):
     # three channels: left, right, center
+    scale_factor = img_shape[1] / 128
+    thickness = int(3 * scale_factor)
     imgs = list()
     for i in range(3):
         imgs.append(np.zeros(img_shape[:2], dtype = "uint8"))
 
     if "chead" in jo:
         # MPII
-        thickness = 3
 
         # fill body
         body = ["lhip", "lshoulder", "rshoulder", "rhip"]
@@ -158,7 +159,6 @@ def make_joint_img(img_shape, jo, joints):
             body_pts = np.int_(body_pts)
             cv2.fillPoly(imgs[2], body_pts, 255)
 
-        thickness = 3
         right_lines = [
                 ("rankle", "rknee"),
                 ("rknee", "rhip"),
@@ -194,6 +194,12 @@ def make_joint_img(img_shape, jo, joints):
         cv2.line(imgs[0], a, b, color = 127, thickness = thickness)
         cv2.line(imgs[1], a, b, color = 127, thickness = thickness)
 
+        cn = tuple(np.int_(cn))
+        leye = tuple(np.int_(joints[jo.index("leye")]))
+        reye = tuple(np.int_(joints[jo.index("reye")]))
+        cv2.line(imgs[0], cn, reye, color = 255, thickness = thickness)
+        cv2.line(imgs[1], cn, leye, color = 255, thickness = thickness)
+
     img = np.stack(imgs, axis = -1)
     if img_shape[-1] == 1:
         img = np.mean(img, axis = -1)[:,:,None]
@@ -201,6 +207,7 @@ def make_joint_img(img_shape, jo, joints):
 
 
 def make_mask_img(img_shape, jo, joints):
+    scale_factor = img_shape[1] / 128
     masks = 3*[None]
     for i in range(3):
         masks[i] = np.zeros(img_shape[:2], dtype = "uint8")
@@ -213,7 +220,7 @@ def make_mask_img(img_shape, jo, joints):
     head_pts = np.array([[joints[jo.index(part),:] for part in head]], dtype = np.int32)
     cv2.fillPoly(masks[2], head_pts, 255)
 
-    thickness = 15
+    thickness = int(15 * scale_factor)
     lines = [[
         ("rankle", "rknee"),
         ("rknee", "rhip"),
@@ -239,7 +246,9 @@ def make_mask_img(img_shape, jo, joints):
             cv2.line(masks[i], a, b, color = 255, thickness = thickness)
 
     for i in range(3):
-        r = 11
+        r = int(11 * scale_factor)
+        if r % 2 == 0:
+            r = r + 1
         masks[i] = cv2.GaussianBlur(masks[i], (r,r), 0)
         maxmask = np.max(masks[i])
         if maxmask > 0:
@@ -261,7 +270,7 @@ class IndexFlow(object):
             mask = True,
             fill_batches = True,
             shuffle = True,
-            return_index_id = False):
+            return_keys = ["imgs", "joints"]):
         self.shape = shape
         self.batch_size = self.shape[0]
         self.img_shape = self.shape[1:]
@@ -272,7 +281,7 @@ class IndexFlow(object):
         self.mask = mask
         self.fill_batches = fill_batches
         self.shuffle_ = shuffle
-        self.return_index_id = return_index_id
+        self.return_keys = return_keys
 
         self.jo = self.index["joint_order"]
         self.indices = np.array(
@@ -286,6 +295,9 @@ class IndexFlow(object):
 
 
     def __next__(self):
+        batch = dict()
+
+        # get indices for batch
         batch_start, batch_end = self.batch_start, self.batch_start + self.batch_size
         batch_indices = self.indices[batch_start:batch_end]
         if self.fill_batches and batch_indices.shape[0] != self.batch_size:
@@ -293,51 +305,66 @@ class IndexFlow(object):
             batch_indices = np.concatenate([batch_indices, self.indices[:n_missing]], axis = 0)
             assert(batch_indices.shape[0] == self.batch_size)
         batch_indices = np.array(batch_indices)
+        batch["indices"] = batch_indices
 
-        keys = ["imgs", "joints"]
-        batch = dict()
-        for k in keys:
-            batch[k] = [self.index[k][i] for i in batch_indices]
-
-        # load images
-        batch_imgs = list()
-        for fname in batch["imgs"]:
-            path = os.path.join(self.basepath, fname)
-            batch_imgs.append(load_img(path, target_size = self.img_shape))
-        batch["imgs"] = np.stack(batch_imgs)
-
-        # generate mask based on joint locations
-        if self.mask:
-            batch_masks = list()
-            for joints in batch["joints"]:
-                mask = make_mask_img(self.img_shape, self.jo, joints)
-                batch_masks.append(mask)
-            batch["masks"] = np.stack(batch_masks)
-
-        # generate stickmen
-        batch_joints = list()
-        for joints in batch["joints"]:
-            img = make_joint_img(self.img_shape, self.jo, joints)
-            batch_joints.append(img)
-        batch["joints"] = np.stack(batch_joints)
-
-        # prepare new epoch
+        # prepare next batch
         if batch_end >= self.n:
             self.shuffle()
         else:
             self.batch_start = batch_end
 
-        # preprocessing
+        # prepare batch data
+        # load images
+        batch["imgs"] = list()
+        for i in batch_indices:
+            fname = self.index["imgs"][i]
+            path = os.path.join(self.basepath, fname)
+            batch["imgs"].append(load_img(path, target_size = self.img_shape))
+        batch["imgs"] = np.stack(batch["imgs"])
         batch["imgs"] = preprocess(batch["imgs"])
-        if self.mask:
-            batch["masks"] = preprocess_mask(batch["masks"])
-            batch["imgs"] = batch["imgs"] * batch["masks"]
+
+        # load joint coordinates
+        batch["joints_coordinates"] = [self.index["joints"][i] for i in batch_indices]
+
+        # generate stickmen images from coordinates
+        batch["joints"] = list()
+        for joints in batch["joints_coordinates"]:
+            img = make_joint_img(self.img_shape, self.jo, joints)
+            batch["joints"].append(img)
+        batch["joints"] = np.stack(batch["joints"])
         batch["joints"] = preprocess(batch["joints"])
 
-        if self.return_index_id:
-            return batch["imgs"], batch["joints"], batch_indices
-        else:
-            return batch["imgs"], batch["joints"]
+        if self.mask:
+            if "masks" in self.index:
+                batch_masks = list()
+                for i in batch_indices:
+                    fname = self.index["masks"][i]
+                    path = os.path.join(self.basepath, fname)
+                    batch_masks.append(load_img(path, target_size = self.img_shape))
+            else:
+                # generate mask based on joint coordinates
+                batch_masks = list()
+                for joints in batch["joints_coordinates"]:
+                    mask = make_mask_img(self.img_shape, self.jo, joints)
+                    batch_masks.append(mask)
+            batch["masks"] = np.stack(batch_masks)
+            batch["masks"] = preprocess_mask(batch["masks"])
+            # apply mask to images
+            batch["imgs"] = batch["imgs"] * batch["masks"]
+
+        if "reconstruction" in self.return_keys:
+            assert self.mask # reconstructions were generated for masked data
+            # load reconstructions
+            batch["reconstruction"] = list()
+            for i in batch_indices:
+                fname = self.index["reconstruction"][i]
+                path = os.path.join(self.basepath, fname)
+                batch["reconstruction"].append(load_img(path, target_size = self.img_shape))
+            batch["reconstruction"] = np.stack(batch["reconstruction"])
+            batch["reconstruction"] = preprocess(batch["reconstruction"])
+
+        batch_list = [batch[k] for k in self.return_keys]
+        return batch_list
 
 
     def shuffle(self):
@@ -353,9 +380,9 @@ def get_batches(
         mask,
         fill_batches = True,
         shuffle = True,
-        return_index_id = False):
+        return_keys = ["imgs", "joints"]):
     """Buffered IndexFlow."""
-    flow = IndexFlow(shape, index_path, train, mask, fill_batches, shuffle, return_index_id)
+    flow = IndexFlow(shape, index_path, train, mask, fill_batches, shuffle, return_keys)
     return BufferedWrapper(flow)
 
 
@@ -381,3 +408,26 @@ if __name__ == "__main__":
             mask = True)
     X, C = next(batches)
     plot_batch(X, "masked.png")
+
+    batches = get_batches(
+            shape = (16, 32, 32, 3),
+            index_path = sys.argv[1],
+            train = True,
+            mask = True)
+    X, C = next(batches)
+    plot_batch(X, "masked32.png")
+    plot_batch(C, "joints32.png")
+
+    try:
+        batches = get_batches(
+                shape = (16, 64, 64, 3),
+                index_path = sys.argv[1],
+                train = True,
+                mask = True,
+                return_keys = ["imgs", "joints", "reconstruction"])
+        X, C, R = next(batches)
+        plot_batch(X, "masked64.png")
+        plot_batch(C, "joints64.png")
+        plot_batch(R, "recons64.png")
+    except KeyError:
+        print("No reconstructions present.")
