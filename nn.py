@@ -446,12 +446,25 @@ sobelx = sobelx[:,:,None]
 sobely = sobely[:,:,None]
 # stack along new dim for output channels
 sobel = np.stack([sobelx, sobely], axis = -1)
-def tf_img_grad(x):
+
+fdx = np.zeros([3,3])
+fdx[1,:] = difference1d
+fdx = fdx[:,:,None]
+
+fdy = np.zeros([3,3])
+fdy[:,1] = difference1d
+fdy = fdy[:,:,None]
+fd = np.stack([fdx, fdy], axis = -1)
+def tf_img_grad(x, use_sobel = True):
     """Sobel approximation of gradient."""
     gray = tf.reduce_mean(x, axis = -1, keep_dims = True)
+    if use_sobel:
+        filter_ = sobel
+    else:
+        filter_ = fd
     grad = tf.nn.conv2d(
             input = gray,
-            filter = sobel,
+            filter = filter_,
             strides = 4*[1],
             padding = "SAME")
     return grad
@@ -468,6 +481,20 @@ def tf_grad_mag(x):
     """Pointwise L2 norm of gradient."""
     gx = tf_img_grad(x)
     return tf.sqrt(tf.reduce_sum(tf.square(gx), axis = -1, keep_dims = True))
+
+
+def tv_loss(x):
+    h = 1.0 / x.shape.as_list()[1]
+    g = tf_img_grad(x, use_sobel = False)
+    hgl1 = h * tf.sqrt(
+            tf.reduce_sum(
+                tf.square(g),
+                axis = 3))
+    return tf.reduce_mean(
+            tf.reduce_sum(
+                hgl1,
+                axis = [1,2]))
+
 
 
 def likelihood_loss(target, tail_decoding, loss):

@@ -147,9 +147,15 @@ class Model(object):
 
     def define_graph(self):
         # pretrained vgg19 for perceptual loss
-        feature_layers = ["input_1", "block1_conv2", "block2_conv2",
-                "block3_conv2", "block4_conv2", "block5_conv2"]
-        self.vgg19 = deeploss.VGG19Features(feature_layers)
+        """
+        feature_layers = [
+                "input_1", "block1_conv2", "block2_conv2", "block3_conv2", "block4_conv2", "block5_conv2"]
+        feature_weights = [
+                #1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
+                1.0, 1.0, 1.0, 1.0, 1.0, 10.0]
+        self.vgg19 = deeploss.VGG19Features(feature_layers, feature_weights)
+        """
+        self.vgg19 = deeploss.VGG19Features()
 
         global_step = tf.Variable(0, trainable = False, name = "global_step")
         lr = nn.make_linear_var(
@@ -224,6 +230,8 @@ class Model(object):
         self.img_ops["x"] = self.x
         self.img_ops["x_corrupted"] = self.x + np.exp(-2.0)*tf.random_normal(self.x.shape)
         self.img_ops["c"] = self.c
+        for i, l in enumerate(self.vgg19.losses):
+            self.log_ops["vgg_loss_{}".format(i)] = l
 
         # keep seperate train and validation summaries
         # only training summary contains histograms
