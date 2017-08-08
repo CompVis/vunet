@@ -13,6 +13,7 @@ import PIL
 import nn
 import models
 from batches import get_batches, plot_batch, postprocess
+import deeploss
 
 
 def init_logging(out_base_dir):
@@ -137,25 +138,33 @@ class Model(object):
 
 
     def sample(self, params, **kwargs):
-        return nn.sample_from_discretized_mix_logistic(params, 10, **kwargs)
+        return params
 
 
     def likelihood_loss(self, x, params):
-        return nn.discretized_mix_logistic_loss(x, params)
+        return self.vgg19.make_loss_op(x, params)
 
 
     def define_graph(self):
+        # pretrained vgg19 for perceptual loss
+        feature_layers = ["input_1", "block1_conv2", "block2_conv2",
+                "block3_conv2", "block4_conv2", "block5_conv2"]
+        self.vgg19 = deeploss.VGG19Features(feature_layers)
+
         global_step = tf.Variable(0, trainable = False, name = "global_step")
         lr = nn.make_linear_var(
                 global_step,
                 self.lr_decay_begin, self.lr_decay_end,
                 self.initial_lr, 0.0,
                 0.0, self.initial_lr)
+        """
         kl_weight = nn.make_linear_var(
                 global_step,
                 self.lr_decay_begin, self.lr_decay_end // 2,
                 0.0, 1.0,
                 1.0, 1.0)
+        """
+        kl_weight = tf.to_float(0.1)
 
         # initialization
         self.x_init = tf.placeholder(
@@ -177,8 +186,6 @@ class Model(object):
         params, qs, ps, activations = self.train_forward_pass(self.x, self.c, dropout_p = self.dropout_p)
         # sample from model distribution
         sample = self.sample(params)
-        mean_sample = self.sample(params, mean = True)
-        map_sample = self.sample(params, temp1 = 1.0, temp2 = 0.0)
         # maximize likelihood
         likelihood_loss = self.likelihood_loss(self.x, params)
         kl_loss = tf.to_float(0.0)
@@ -190,16 +197,16 @@ class Model(object):
         # testing
         test_forward = self.test_forward_pass(self.c)
         test_sample = self.sample(test_forward)
-        test_mean_sample = self.sample(test_forward, mean = True)
-        test_map_sample = self.sample(test_forward, temp1 = 1.0, temp2 = 0.0)
 
         # reconstruction
         reconstruction_params, _, _, _ = self.train_forward_pass(self.x, self.c, dropout_p = 0.0)
-        self.reconstruction = self.sample(reconstruction_params, mean = True)
+        self.reconstruction = self.sample(reconstruction_params)
 
         # optimization
+        self.variables = [v for v in tf.trainable_variables()
+                if not v in self.vgg19.variables]
         optimizer = tf.train.AdamOptimizer(learning_rate = lr, beta1 = 0.5, beta2 = 0.9)
-        opt_op = optimizer.minimize(loss, var_list = tf.trainable_variables())
+        opt_op = optimizer.minimize(loss, var_list = self.variables)
         with tf.control_dependencies([opt_op]):
             self.train_op = tf.assign(global_step, global_step + 1)
 
@@ -213,11 +220,7 @@ class Model(object):
         self.log_ops["loss"] = loss
         self.img_ops = dict()
         self.img_ops["sample"] = sample
-        self.img_ops["mean_sample"] = mean_sample
-        self.img_ops["map_sample"] = map_sample
         self.img_ops["test_sample"] = test_sample
-        self.img_ops["test_mean_sample"] = test_mean_sample
-        self.img_ops["test_map_sample"] = test_map_sample
         self.img_ops["x"] = self.x
         self.img_ops["x_corrupted"] = self.x + np.exp(-2.0)*tf.random_normal(self.x.shape)
         self.img_ops["c"] = self.c
@@ -241,7 +244,7 @@ class Model(object):
         self.writer = tf.summary.FileWriter(
                 self.out_dir,
                 session.graph)
-        self.saver = tf.train.Saver()
+        self.saver = tf.train.Saver(self.variables)
         session.run(tf.global_variables_initializer(), {
             self.x_init: init_batch[0],
             self.c_init: init_batch[1]})
@@ -252,7 +255,7 @@ class Model(object):
         self.writer = tf.summary.FileWriter(
                 self.out_dir,
                 session.graph)
-        self.saver = tf.train.Saver()
+        self.saver = tf.train.Saver(self.variables)
         self.saver.restore(session, restore_path)
         self.logger.info("Restored model from {}".format(restore_path))
 
@@ -341,12 +344,9 @@ class Model(object):
     def test(self, c_batch):
         results = dict()
         results["cond"] = c_batch
-        sample, mean_sample = session.run([
-            self.img_ops["test_sample"],
-            self.img_ops["test_mean_sample"]],
+        sample = session.run(self.img_ops["test_sample"],
             {self.c: c_batch})
         results["test_sample"] = sample
-        results["test_mean_sample"] = mean_sample
         return results
 
 
@@ -354,11 +354,11 @@ class Model(object):
         results = dict()
         results["cond"] = c_batch
         sample = session.run(
-            self.img_ops["test_mean_sample"], {self.c: c_batch})
+            self.img_ops["test_sample"], {self.c: c_batch})
         results["sample_{}".format(0)] = sample
         for i in range(n_iters - 1):
             sample = session.run(
-                    self.img_ops["mean_sample"], {
+                    self.img_ops["sample"], {
                         self.x: sample,
                         self.c: c_batch})
             results["sample_{:03}".format(i+1)] = sample
@@ -382,7 +382,7 @@ class Model(object):
             infer_c = self.c
             generate_c = self.c_generator
             transfer_params = self.transfer_pass(infer_x, infer_c, generate_c)
-            transfer_mean_sample = self.sample(transfer_params, mean = True)
+            transfer_mean_sample = self.sample(transfer_params)
             self.img_ops["transfer"] = transfer_mean_sample
             self._init_transfer = True
 
@@ -489,7 +489,7 @@ if __name__ == "__main__":
                 R_batch = model.reconstruct(X_batch, C_batch)
                 R_batch = postprocess(R_batch) # to uint8 for saving
                 # samples from pose
-                S_batch = model.test(C_batch)["test_mean_sample"]
+                S_batch = model.test(C_batch)["test_sample"]
                 S_batch = postprocess(S_batch) # to uint8 for saving
                 for batch_i, i in enumerate(I_batch):
                     original_fname = index["imgs"][i]

@@ -208,8 +208,7 @@ def enc_down(
 def dec_parameters(
         h, init = False, **kwargs):
     with model_arg_scope(init = init):
-        nm = 10
-        num_filters = 10*nm
+        num_filters = 3
         return nn.conv2d(h, num_filters)
 
 
