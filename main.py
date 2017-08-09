@@ -147,15 +147,12 @@ class Model(object):
 
     def define_graph(self):
         # pretrained vgg19 for perceptual loss
-        """
         feature_layers = [
                 "input_1", "block1_conv2", "block2_conv2", "block3_conv2", "block4_conv2", "block5_conv2"]
         feature_weights = [
                 #1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
                 1.0, 1.0, 1.0, 1.0, 1.0, 10.0]
-        self.vgg19 = deeploss.VGG19Features(feature_layers, feature_weights)
-        """
-        self.vgg19 = deeploss.VGG19Features()
+        self.vgg19 = deeploss.VGG19Features(session, feature_layers, feature_weights)
 
         global_step = tf.Variable(0, trainable = False, name = "global_step")
         lr = nn.make_linear_var(
@@ -209,10 +206,10 @@ class Model(object):
         self.reconstruction = self.sample(reconstruction_params)
 
         # optimization
-        self.variables = [v for v in tf.trainable_variables()
+        self.trainable_variables = [v for v in tf.trainable_variables()
                 if not v in self.vgg19.variables]
         optimizer = tf.train.AdamOptimizer(learning_rate = lr, beta1 = 0.5, beta2 = 0.9)
-        opt_op = optimizer.minimize(loss, var_list = self.variables)
+        opt_op = optimizer.minimize(loss, var_list = self.trainable_variables)
         with tf.control_dependencies([opt_op]):
             self.train_op = tf.assign(global_step, global_step + 1)
 
@@ -245,6 +242,10 @@ class Model(object):
             valid_summaries.append(tf.summary.scalar(k+"_valid", v))
         self.valid_summary_op = tf.summary.merge(valid_summaries)
 
+        # all variables for initialization
+        self.variables = [v for v in tf.global_variables()
+                if not v in self.vgg19.variables]
+
         self.logger.info("Defined graph")
 
 
@@ -253,7 +254,8 @@ class Model(object):
                 self.out_dir,
                 session.graph)
         self.saver = tf.train.Saver(self.variables)
-        session.run(tf.global_variables_initializer(), {
+        initializer_op = tf.variables_initializer(self.variables)
+        session.run(initializer_op, {
             self.x_init: init_batch[0],
             self.c_init: init_batch[1]})
         self.logger.info("Initialized model from scratch")
