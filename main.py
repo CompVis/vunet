@@ -151,7 +151,7 @@ class Model(object):
                 "input_1", "block1_conv2", "block2_conv2", "block3_conv2", "block4_conv2", "block5_conv2"]
         feature_weights = [
                 #1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
-                1.0, 1.0, 1.0, 1.0, 1.0, 10.0]
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         self.vgg19 = deeploss.VGG19Features(session, feature_layers, feature_weights)
 
         global_step = tf.Variable(0, trainable = False, name = "global_step")
