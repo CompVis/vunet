@@ -72,7 +72,6 @@ class Model(object):
         self.checkpoint_best = False
 
         self.dropout_p = opt.drop_prob
-        self.n_scales = opt.n_scales
 
         self.best_loss = float("inf")
         self.checkpoint_dir = os.path.join(self.out_dir, "checkpoints")
@@ -84,19 +83,20 @@ class Model(object):
 
     def define_models(self):
         n_latent_scales = 2
+        n_scales = 1 + int(np.round(np.log2(self.img_shape[0])))
         self.enc_up_pass = models.make_model(
                 "enc_up", models.enc_up,
-                n_scales = self.n_scales)
+                n_scales = n_scales)
         self.enc_down_pass = models.make_model(
                 "enc_down", models.enc_down,
-                n_scales = self.n_scales,
+                n_scales = n_scales,
                 n_latent_scales = n_latent_scales)
         self.dec_up_pass = models.make_model(
                 "dec_up", models.dec_up,
-                n_scales = self.n_scales)
+                n_scales = n_scales)
         self.dec_down_pass = models.make_model(
                 "dec_down", models.dec_down,
-                n_scales = self.n_scales,
+                n_scales = n_scales,
                 n_latent_scales = n_latent_scales)
         self.dec_params = models.make_model(
                 "dec_params", models.dec_parameters)
@@ -104,7 +104,6 @@ class Model(object):
 
     def train_forward_pass(self, x, c, dropout_p, init = False):
         kwargs = {"init": init, "dropout_p": dropout_p}
-        x = x + np.exp(-2.0) * tf.random_normal(x.shape)
         # encoder
         hs = self.enc_up_pass(x, c, **kwargs)
         es, qs, zs_posterior = self.enc_down_pass(hs, **kwargs)
@@ -225,7 +224,6 @@ class Model(object):
         self.img_ops["sample"] = sample
         self.img_ops["test_sample"] = test_sample
         self.img_ops["x"] = self.x
-        self.img_ops["x_corrupted"] = self.x + np.exp(-2.0)*tf.random_normal(self.x.shape)
         self.img_ops["c"] = self.c
         for i, l in enumerate(self.vgg19.losses):
             self.log_ops["vgg_loss_{}".format(i)] = l
@@ -421,7 +419,6 @@ if __name__ == "__main__":
     parser.add_argument("--log_freq", default = 250, type = int, help = "frequency to log")
     parser.add_argument("--ckpt_freq", default = 1000, type = int, help = "frequency to checkpoint")
     parser.add_argument("--test_freq", default = 1000, type = int, help = "frequency to test")
-    parser.add_argument("--n_scales", default = 8, type = int, help = "Number of scales")
     parser.add_argument("--drop_prob", default = 0.5, type = float, help = "Dropout probability")
     parser.add_argument("--mask", dest = "mask", action = "store_true", help = "Use masked data")
     parser.add_argument("--no-mask", dest = "mask", action = "store_false", help = "Do not use mask")

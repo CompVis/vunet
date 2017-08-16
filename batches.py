@@ -109,7 +109,16 @@ def make_joint_img(img_shape, jo, joints):
     for i in range(3):
         imgs.append(np.zeros(img_shape[:2], dtype = "uint8"))
 
-    if "chead" in jo:
+    if len(jo) == 2:
+        # Head image
+        line = ("cneck", "chead")
+        l = [jo.index(line[0]), jo.index(line[1])]
+        a = tuple(np.int_(joints[l[0]]))
+        b = tuple(np.int_(joints[l[1]]))
+        cv2.line(imgs[0], a, b, color = 255, thickness = thickness)
+        cv2.line(imgs[1], a, b, color = 255, thickness = thickness)
+        cv2.line(imgs[2], a, b, color = 255, thickness = thickness)
+    elif "chead" in jo:
         # MPII
 
         # fill body
