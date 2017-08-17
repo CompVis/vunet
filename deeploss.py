@@ -4,6 +4,7 @@ import numpy as np
 from tensorflow.contrib.keras.api.keras.models import Model
 from tensorflow.contrib.keras.api.keras.applications.vgg19 import VGG19
 from tensorflow.contrib.keras.api.keras import backend as K
+import models
 
 
 def preprocess_input(x):
@@ -73,6 +74,126 @@ class VGG19Features(object):
                     x_features, y_features)]
         for i in range(len(losses)):
             losses[i] = self.feature_weights[i] * losses[i]
+        loss = tf.add_n(losses)
+
+        self.losses = losses
+
+        return loss
+
+
+class PixelFeatures(object):
+    def __init__(self, session):
+        self.variables = []
+
+
+    def make_loss_op(self, x, y):
+        """x, y should be rgb tensors in [-1,1]."""
+        x_features = [x]
+        y_features = [y]
+
+        losses = [
+                tf.reduce_mean(
+                    tf.reduce_sum(
+                        tf.abs(xf - yf),
+                        axis = [1,2,3]))
+                for xf, yf in zip(x_features, y_features)]
+
+        self.feature_weights = 11*[1000.0/(128*128*3)]
+        for i in range(len(losses)):
+            losses[i] = self.feature_weights[i] * losses[i]
+
+        loss = tf.add_n(losses)
+
+        self.losses = losses
+
+        return loss
+
+
+class JigsawFeatures(object):
+    def __init__(self, session):
+        self.cfn = models.make_model(
+                "cfn", models.cfn_features,
+                n_scales = 5,
+                max_filters = 256)
+
+        x_init = tf.placeholder(
+                tf.float32,
+                shape = [64,128,128,3])
+        _ = self.cfn(x_init, init = True, dropout_p = 0.5)
+
+        self.variables = [v for v in tf.trainable_variables() if
+                v.name.startswith("cfn")]
+        self.saver = tf.train.Saver(self.variables)
+        restore_path = "../jigsaw/log/2017-08-16T14:27:04/checkpoints/model.ckpt-100000"
+        self.saver.restore(session, restore_path)
+
+        self.kwargs = {"init": False, "dropout_p": 0.0}
+
+
+    def make_loss_op(self, x, y):
+        """x, y should be rgb tensors in [-1,1]."""
+        x_features = [x]
+        y_features = [y]
+        x_features += self.cfn(x, **self.kwargs)
+        y_features += self.cfn(y, **self.kwargs)
+
+        losses = [
+                tf.reduce_mean(
+                    tf.reduce_sum(
+                        tf.abs(xf - yf),
+                        axis = [1,2,3]))
+                for xf, yf in zip(x_features, y_features)]
+
+        self.feature_weights = 11*[1.0/(128*128*3)]
+        for i in range(len(losses)):
+            losses[i] = self.feature_weights[i] * losses[i]
+
+        loss = tf.add_n(losses)
+
+        self.losses = losses
+
+        return loss
+
+
+class AttrFeatures(object):
+    def __init__(self, session):
+        self.fnet = models.make_model(
+                "encoder", models.feature_encoder,
+                n_scales = 5,
+                max_filters = 512)
+
+        x_init = tf.placeholder(
+                tf.float32,
+                shape = [64,128,128,3])
+        _ = self.fnet(x_init, init = True, dropout_p = 0.5)
+
+        self.variables = [v for v in tf.trainable_variables() if
+                v.name.startswith("encoder")]
+        self.saver = tf.train.Saver(self.variables)
+        restore_path = "log/2017-08-13T21:33:12/checkpoints/model.ckpt-100000"
+        self.saver.restore(session, restore_path)
+
+        self.kwargs = {"init": False, "dropout_p": 0.0}
+
+
+    def make_loss_op(self, x, y):
+        """x, y should be rgb tensors in [-1,1]."""
+        x_features = [x]
+        y_features = [y]
+        x_features += self.fnet(x, **self.kwargs)
+        y_features += self.fnet(y, **self.kwargs)
+
+        losses = [
+                tf.reduce_mean(
+                    tf.reduce_sum(
+                        tf.abs(xf - yf),
+                        axis = [1,2,3]))
+                for xf, yf in zip(x_features, y_features)]
+
+        self.feature_weights = 11*[1.0/(128*128*3)]
+        for i in range(len(losses)):
+            losses[i] = self.feature_weights[i] * losses[i]
+
         loss = tf.add_n(losses)
 
         self.losses = losses
