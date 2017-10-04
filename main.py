@@ -12,7 +12,7 @@ import PIL
 
 import nn
 import models
-from batches import get_batches, plot_batch, postprocess
+from batches_pg2 import get_batches, plot_batch, postprocess
 import deeploss
 
 
