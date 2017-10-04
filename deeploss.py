@@ -24,11 +24,17 @@ def preprocess_input(x):
 
 
 class VGG19Features(object):
-    def __init__(self, session, feature_layers, feature_weights = None):
+    def __init__(self, session, feature_layers = None, feature_weights = None):
         K.set_session(session)
         self.base_model = VGG19(
                 include_top = False,
                 weights='imagenet')
+        if feature_layers is None:
+            feature_layers = [
+                    "input_1",
+                    "block1_conv2", "block2_conv2",
+                    "block3_conv2", "block4_conv2",
+                    "block5_conv2"]
         self.layer_names = [l.name for l in self.base_model.layers]
         for k in feature_layers:
             if not k in self.layer_names:

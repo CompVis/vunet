@@ -146,7 +146,8 @@ class Model(object):
 
     def define_graph(self):
         # pretrained net for perceptual loss
-        self.vgg19 = deeploss.JigsawFeatures(session)
+        #self.vgg19 = deeploss.JigsawFeatures(session)
+        self.vgg19 = deeploss.VGG19Features(session)
 
         global_step = tf.Variable(0, trainable = False, name = "global_step")
         lr = nn.make_linear_var(
