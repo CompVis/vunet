@@ -129,9 +129,17 @@ class Model(object):
         # infer latent code
         hs = self.enc_up_pass(infer_x, infer_c, **kwargs)
         es, qs, zs_posterior = self.enc_down_pass(hs, **kwargs)
+        zs_mean = list()
+        for q in qs:
+            mean, logvar = tf.split(q, 2, axis = 3)
+            zs_mean.append(mean)
         # generate from inferred latent code and conditioning
         gs = self.dec_up_pass(generate_c, **kwargs)
-        ds, ps, zs_prior = self.dec_down_pass(gs, zs_posterior, training = True, **kwargs)
+        use_mean = True
+        if use_mean:
+            ds, ps, zs_prior = self.dec_down_pass(gs, zs_mean, training = True, **kwargs)
+        else:
+            ds, ps, zs_prior = self.dec_down_pass(gs, zs_posterior, training = True, **kwargs)
         params = self.dec_params(ds[-1], **kwargs)
         return params
 
@@ -519,7 +527,7 @@ if __name__ == "__main__":
         img_shape = 2*[opt.spatial_size] + [3]
         data_shape = [batch_size] + img_shape
         valid_batches = get_batches(data_shape, opt.data_index,
-                mask = opt.mask, train = False)
+                mask = opt.mask, train = False, shuffle = True)
         model = Model(opt, out_dir, logger)
         model.restore_graph(opt.checkpoint)
 
