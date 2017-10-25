@@ -250,7 +250,8 @@ def enc_up(
         # outputs
         hs = []
         # prepare input
-        xc = tf.concat([x,c], axis = -1)
+        #xc = tf.concat([x,c], axis = -1)
+        xc = x
         h = nn.nin(xc, n_filters)
         for l in range(n_scales):
             # level module

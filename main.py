@@ -58,6 +58,8 @@ class Model(object):
     def __init__(self, opt, out_dir, logger):
         self.batch_size = opt.batch_size
         self.img_shape = 2*[opt.spatial_size] + [3]
+        redux = 2
+        self.imgn_shape = 2*[opt.spatial_size//(2**redux)] + [30]
         self.init_batches = opt.init_batches
 
         self.initial_lr = opt.lr
@@ -83,17 +85,21 @@ class Model(object):
 
     def define_models(self):
         n_latent_scales = 2
-        n_scales = 1 + int(np.round(np.log2(self.img_shape[0])))
+        n_scales = 1 + int(np.round(np.log2(self.img_shape[0]))) - 2
+        n_filters = 32
+        redux = 2
         self.enc_up_pass = models.make_model(
                 "enc_up", models.enc_up,
-                n_scales = n_scales)
+                n_scales = n_scales - redux,
+                n_filters = n_filters*2**redux)
         self.enc_down_pass = models.make_model(
                 "enc_down", models.enc_down,
-                n_scales = n_scales,
+                n_scales = n_scales - redux,
                 n_latent_scales = n_latent_scales)
         self.dec_up_pass = models.make_model(
                 "dec_up", models.dec_up,
-                n_scales = n_scales)
+                n_scales = n_scales,
+                n_filters = n_filters)
         self.dec_down_pass = models.make_model(
                 "dec_down", models.dec_down,
                 n_scales = n_scales,
@@ -102,10 +108,10 @@ class Model(object):
                 "dec_params", models.dec_parameters)
 
 
-    def train_forward_pass(self, x, c, dropout_p, init = False):
+    def train_forward_pass(self, x, c, xn, cn, dropout_p, init = False):
         kwargs = {"init": init, "dropout_p": dropout_p}
         # encoder
-        hs = self.enc_up_pass(x, c, **kwargs)
+        hs = self.enc_up_pass(xn, cn, **kwargs)
         es, qs, zs_posterior = self.enc_down_pass(hs, **kwargs)
         # decoder
         gs = self.dec_up_pass(c, **kwargs)
@@ -146,7 +152,7 @@ class Model(object):
 
 
     def likelihood_loss(self, x, params):
-        return self.vgg19.make_loss_op(x, params)
+        return 5.0*self.vgg19.make_loss_op(x, params)
 
 
     def define_graph(self):
@@ -162,9 +168,9 @@ class Model(object):
                 0.0, self.initial_lr)
         kl_weight = nn.make_linear_var(
                 global_step,
-                self.lr_decay_begin, self.lr_decay_end // 2,
-                1e-3, 1.0,
-                1e-3, 1.0)
+                self.lr_decay_end // 2, 3 * self.lr_decay_end // 4,
+                1e-6, 1.0,
+                1e-6, 1.0)
         #kl_weight = tf.to_float(0.1)
 
         # initialization
@@ -174,7 +180,16 @@ class Model(object):
         self.c_init = tf.placeholder(
                 tf.float32,
                 shape = [self.init_batches * self.batch_size] + self.img_shape)
-        _ = self.train_forward_pass(self.x_init, self.c_init, dropout_p = self.dropout_p, init = True)
+        self.xn_init = tf.placeholder(
+                tf.float32,
+                shape = [self.init_batches * self.batch_size] + self.imgn_shape)
+        self.cn_init = tf.placeholder(
+                tf.float32,
+                shape = [self.init_batches * self.batch_size] + self.imgn_shape)
+        _ = self.train_forward_pass(
+                self.x_init, self.c_init,
+                self.xn_init, self.cn_init,
+                dropout_p = self.dropout_p, init = True)
 
         # training
         self.x = tf.placeholder(
@@ -183,8 +198,17 @@ class Model(object):
         self.c = tf.placeholder(
                 tf.float32,
                 shape = [self.batch_size] + self.img_shape)
+        self.xn = tf.placeholder(
+                tf.float32,
+                shape = [self.batch_size] + self.imgn_shape)
+        self.cn = tf.placeholder(
+                tf.float32,
+                shape = [self.batch_size] + self.imgn_shape)
         # compute parameters of model distribution
-        params, qs, ps, activations = self.train_forward_pass(self.x, self.c, dropout_p = self.dropout_p)
+        params, qs, ps, activations = self.train_forward_pass(
+                self.x, self.c,
+                self.xn, self.cn,
+                dropout_p = self.dropout_p)
         # sample from model distribution
         sample = self.sample(params)
         # maximize likelihood
@@ -200,7 +224,10 @@ class Model(object):
         test_sample = self.sample(test_forward)
 
         # reconstruction
-        reconstruction_params, _, _, _ = self.train_forward_pass(self.x, self.c, dropout_p = 0.0)
+        reconstruction_params, _, _, _ = self.train_forward_pass(
+                self.x, self.c,
+                self.xn, self.cn,
+                dropout_p = 0.0)
         self.reconstruction = self.sample(reconstruction_params)
 
         # optimization
@@ -224,6 +251,8 @@ class Model(object):
         self.img_ops["test_sample"] = test_sample
         self.img_ops["x"] = self.x
         self.img_ops["c"] = self.c
+        for i in range(10):
+            self.img_ops["xn{}".format(i)] = self.xn[:,:,:,i*3:(i+1)*3]
         for i, l in enumerate(self.vgg19.losses):
             self.log_ops["vgg_loss_{}".format(i)] = l
 
@@ -253,6 +282,8 @@ class Model(object):
         self.saver = tf.train.Saver(self.variables)
         initializer_op = tf.variables_initializer(self.variables)
         session.run(initializer_op, {
+            self.xn_init: init_batch[2],
+            self.cn_init: init_batch[3],
             self.x_init: init_batch[0],
             self.c_init: init_batch[1]})
         self.logger.info("Initialized model from scratch")
@@ -271,8 +302,10 @@ class Model(object):
         start_step = self.log_ops["global_step"].eval(session)
         self.valid_batches = valid_batches
         for batch in trange(start_step, self.lr_decay_end):
-            X_batch, C_batch = next(batches)
+            X_batch, C_batch, XN_batch, CN_batch = next(batches)
             feed_dict = {
+                    self.xn: XN_batch,
+                    self.cn: CN_batch,
                     self.x: X_batch,
                     self.c: C_batch}
             fetch_dict = {"train": self.train_op}
@@ -301,8 +334,10 @@ class Model(object):
 
             if self.valid_batches is not None:
                 # validation run
-                X_batch, C_batch = next(self.valid_batches)
+                X_batch, C_batch, XN_batch, CN_batch = next(self.valid_batches)
                 feed_dict = {
+                        self.xn: XN_batch,
+                        self.cn: CN_batch,
                         self.x: X_batch,
                         self.c: C_batch}
                 fetch_dict = dict()
@@ -329,7 +364,7 @@ class Model(object):
         if global_step % self.test_frequency == 0:
             if self.valid_batches is not None:
                 # testing
-                X_batch, C_batch = next(self.valid_batches)
+                X_batch, C_batch, XN_batch, CN_batch = next(self.valid_batches)
                 x_gen = self.test(C_batch)
                 for k in x_gen:
                     plot_batch(x_gen[k], os.path.join(
@@ -342,9 +377,10 @@ class Model(object):
                 for r in range(bs):
                     imgs.append(C_batch[r,...])
                 for i in range(bs):
-                    x_infer = X_batch[i,...]
-                    c_infer = C_batch[i,...]
-                    imgs.append(x_infer)
+                    x_infer = XN_batch[i,...]
+                    c_infer = CN_batch[i,...]
+                    #imgs.append(x_infer)
+                    imgs.append(X_batch[i,...])
 
                     x_infer_batch = x_infer[None,...].repeat(bs, axis = 0)
                     c_infer_batch = c_infer[None,...].repeat(bs, axis = 0)
@@ -406,8 +442,8 @@ class Model(object):
             self.c_generator = tf.placeholder(
                     tf.float32,
                     shape = [self.batch_size] + self.img_shape)
-            infer_x = self.x
-            infer_c = self.c
+            infer_x = self.xn
+            infer_c = self.cn
             generate_c = self.c_generator
             transfer_params = self.transfer_pass(infer_x, infer_c, generate_c)
             self.transfer_mean_sample = self.sample(transfer_params)
@@ -415,8 +451,8 @@ class Model(object):
 
         return session.run(
                 self.transfer_mean_sample, {
-                    self.x: x_encode,
-                    self.c: c_encode,
+                    self.xn: x_encode,
+                    self.cn: c_encode,
                     self.c_generator: c_decode})
 
 
@@ -428,10 +464,10 @@ if __name__ == "__main__":
     parser.add_argument("--mode", default = "train",
             choices=["train", "test", "mcmc", "add_reconstructions", "transfer"])
     parser.add_argument("--log_dir", default = default_log_dir, help = "path to log into")
-    parser.add_argument("--batch_size", default = 16, type = int, help = "batch size")
+    parser.add_argument("--batch_size", default = 8, type = int, help = "batch size")
     parser.add_argument("--init_batches", default = 4, type = int, help = "number of batches for initialization")
     parser.add_argument("--checkpoint", help = "path to checkpoint to restore")
-    parser.add_argument("--spatial_size", default = 128, type = int, help = "spatial size to resize images to")
+    parser.add_argument("--spatial_size", default = 256, type = int, help = "spatial size to resize images to")
     parser.add_argument("--lr", default = 1e-3, type = float, help = "initial learning rate")
     parser.add_argument("--lr_decay_begin", default = 1000, type = int, help = "steps after which to begin linear lr decay")
     parser.add_argument("--lr_decay_end", default = 100000, type = int, help = "step at which lr is zero, i.e. number of training steps")
@@ -537,7 +573,7 @@ if __name__ == "__main__":
 
     elif opt.mode == "transfer":
         if not opt.checkpoint:
-            opt.checkpoint = "log/2017-10-19T23:41:03/checkpoints/model.ckpt-100000"
+            opt.checkpoint = "log/2017-10-24T16:34:09/checkpoints/model.ckpt-100000"
         batch_size = opt.batch_size
         img_shape = 2*[opt.spatial_size] + [3]
         data_shape = [batch_size] + img_shape
@@ -548,16 +584,16 @@ if __name__ == "__main__":
 
         ids = ["00038", "00281", "01166", "x", "06909", "y", "07586", "07607", "z", "09874"]
         for step in trange(10):
-            X_batch, C_batch = next(valid_batches)
+            X_batch, C_batch, XN_batch, CN_batch = next(valid_batches)
             bs = X_batch.shape[0]
             imgs = list()
             imgs.append(np.zeros_like(X_batch[0,...]))
             for r in range(bs):
                 imgs.append(C_batch[r,...])
             for i in range(bs):
-                x_infer = X_batch[i,...]
-                c_infer = C_batch[i,...]
-                imgs.append(x_infer)
+                x_infer = XN_batch[i,...]
+                c_infer = CN_batch[i,...]
+                imgs.append(X_batch[i,...])
 
                 x_infer_batch = x_infer[None,...].repeat(bs, axis = 0)
                 c_infer_batch = c_infer[None,...].repeat(bs, axis = 0)

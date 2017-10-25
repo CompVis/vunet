@@ -5,85 +5,6 @@ import pickle
 import os
 import cv2
 import math
-from numpy.random import RandomState
-
-
-def get_orientation(joints, jo):
-    return (min(joints[jo.index("lhip"),0],joints[jo.index("lshoulder"),0]) <
-            max(joints[jo.index("rhip"),0],joints[jo.index("rshoulder"),0]))
-
-
-def flip(j,x,c):
-    x = cv2.flip(x, 1)
-    c = cv2.flip(c, 1)
-    width = x.shape[1]
-    j[:,0] = width - 1 - j[:,0]
-    return j,x,c
-
-
-def register(xs,cs,srcs,targets,ys,jo):
-    #print("Registering")
-    bs = xs.shape[0]
-
-    xx = list()
-    cc = list()
-    for i in range(bs):
-        x = xs[i]
-        c = cs[i]
-        src = srcs[i]
-        target = targets[i]
-
-        valid_mask = (src >= 0.0) & (target >= 0.0)
-        valid_mask = np.all(valid_mask, axis = 1)
-
-        valid_src = src[valid_mask]
-        valid_target = target[valid_mask]
-
-        fall_back = False
-
-        if np.sum(valid_mask) >=  4:
-            # figure out orientation and flip if necessary to find restricted
-            # affine transforms
-            src_orient = get_orientation(src, jo)
-            dst_orient = get_orientation(target, jo)
-            if src_orient != dst_orient:
-                valid_src, x, c = flip(valid_src, x, c)
-
-            affine = True
-            if affine:
-                M = cv2.estimateRigidTransform(valid_src, valid_target, fullAffine = False)
-                if M is None:
-                    fall_back = True
-                else:
-                    warped_x = cv2.warpAffine(x, M, x.shape[:2], borderMode = cv2.BORDER_REPLICATE)
-                    xx.append(warped_x)
-
-                    warped_c = cv2.warpAffine(c, M, x.shape[:2], borderMode = cv2.BORDER_REPLICATE)
-                    cc.append(warped_c)
-            else:
-                M, mask = cv2.findHomography(valid_src, valid_target, cv2.RANSAC,5.0)
-                #M, mask = cv2.findHomography(valid_src, valid_target)
-
-                warped_x = cv2.warpPerspective(x, M, x.shape[:2], borderMode = cv2.BORDER_REPLICATE)
-                xx.append(warped_x)
-
-                warped_c = cv2.warpPerspective(c, M, x.shape[:2], borderMode = cv2.BORDER_REPLICATE)
-                cc.append(warped_c)
-        else:
-            fall_back = True
-
-        if fall_back:
-            xx.append(x)
-            cc.append(c)
-
-    xx = np.stack(xx)
-    cc = np.stack(cc)
-
-    #plot_batch(xs,"xs.png")
-    #plot_batch(xx,"xx.png")
-    #plot_batch(ys,"ys.png")
-
-    return xx,cc
 
 
 class BufferedWrapper(object):
@@ -92,7 +13,6 @@ class BufferedWrapper(object):
     def __init__(self, gen):
         self.gen = gen
         self.n = gen.n
-        self.jo = gen.jo
         self.pool = ThreadPool(1)
         self._async_next()
 
@@ -173,6 +93,9 @@ def tile(X, rows, cols):
 
 def plot_batch(X, out_path):
     """Save batch of images tiled."""
+    n_channels = X.shape[3]
+    if n_channels > 3:
+        X = X[:,:,:,np.random.choice(n_channels, size = 3)]
     X = postprocess(X)
     rc = math.sqrt(X.shape[0])
     rows = cols = math.ceil(rc)
@@ -246,6 +169,193 @@ def make_joint_img(img_shape, jo, joints):
     return img
 
 
+def valid_joints(*joints):
+    j = np.stack(joints)
+    return (j >= 0).all()
+
+
+def zoom(img, factor, center = None):
+    shape = img.shape[:2]
+    if center is None or not valid_joints(center):
+        center = np.array(shape) / 2
+    e1 = np.array([1,0])
+    e2 = np.array([0,1])
+
+    dst_center = np.array(center)
+    dst_e1 = e1 * factor
+    dst_e2 = e2 * factor
+
+    src = np.float32([center, center+e1, center+e2])
+    dst = np.float32([dst_center, dst_center+dst_e1, dst_center+dst_e2])
+    M = cv2.getAffineTransform(src, dst)
+
+    return cv2.warpAffine(img, M, shape, flags = cv2.INTER_AREA, borderMode = cv2.BORDER_REPLICATE)
+
+
+def get_crop(bpart, joints, jo, wh, o_w, o_h, ar = 1.0):
+    bpart_indices = [jo.index(b) for b in bpart]
+    part_src = np.float32(joints[bpart_indices])
+
+    # fall backs
+    if not valid_joints(part_src):
+        if bpart[0] == "lhip" and bpart[1] == "lknee":
+            bpart = ["lhip"]
+            bpart_indices = [jo.index(b) for b in bpart]
+            part_src = np.float32(joints[bpart_indices])
+        elif bpart[0] == "rhip" and bpart[1] == "rknee": 
+            bpart = ["rhip"]
+            bpart_indices = [jo.index(b) for b in bpart]
+            part_src = np.float32(joints[bpart_indices])
+
+    if not valid_joints(part_src):
+            return None
+
+    if part_src.shape[0] == 1:
+        # leg fallback
+        a = part_src[0]
+        b = np.float32([a[0],o_h - 1])
+        part_src = np.float32([a,b])
+
+    if part_src.shape[0] == 4:
+        pass
+    elif part_src.shape[0] == 3:
+        # lshoulder, rshoulder, cnose
+        segment = part_src[1] - part_src[0]
+        normal = np.array([-segment[1],segment[0]])
+        if normal[1] > 0.0:
+            normal = -normal
+
+        a = part_src[0] + normal
+        b = part_src[0]
+        c = part_src[1]
+        d = part_src[1] + normal
+        part_src = np.float32([a,b,c,d])
+    else:
+        assert part_src.shape[0] == 2
+
+        segment = part_src[1] - part_src[0]
+        normal = np.array([-segment[1],segment[0]])
+        alpha = ar / 2.0
+        a = part_src[0] + alpha*normal
+        b = part_src[0] - alpha*normal
+        c = part_src[1] - alpha*normal
+        d = part_src[1] + alpha*normal
+        part_src = np.float32([a,b,c,d])
+
+    dst = np.float32([[0.0,0.0],[0.0,1.0],[1.0,1.0],[1.0,0.0]])
+    part_dst = np.float32(wh * dst)
+
+    M = cv2.getPerspectiveTransform(part_src, part_dst)
+    return M
+
+
+def normalize(imgs, coords, stickmen, jo):
+
+    out_imgs = list()
+    out_stickmen = list()
+
+    bs = len(imgs)
+    for i in range(bs):
+        img = imgs[i]
+        joints = coords[i]
+        stickman = stickmen[i]
+
+        h,w = img.shape[:2]
+        o_h = h
+        o_w = w
+        h = h // 4
+        w = w // 4
+        wh = np.array([w,h])
+        wh = np.expand_dims(wh, 0)
+
+        bparts = [
+                ["lshoulder","lhip","rhip","rshoulder"],
+                ["lshoulder", "rshoulder", "rshoulder"],
+                ["lshoulder","lelbow"],
+                ["lelbow", "lwrist"],
+                ["rshoulder","relbow"],
+                ["relbow", "rwrist"],
+                ["lhip", "lknee"],
+                ["lknee", "lankle"],
+                ["rhip", "rknee"],
+                ["rknee", "rankle"]]
+        ar = 0.5
+
+        part_imgs = list()
+        part_stickmen = list()
+        for bpart in bparts:
+            part_img = np.zeros((h,w,3))
+            part_stickman = np.zeros((h,w,3))
+            M = get_crop(bpart, joints, jo, wh, o_w, o_h, ar)
+
+            if M is not None:
+                part_img = cv2.warpPerspective(img, M, (h,w), borderMode = cv2.BORDER_REPLICATE)
+                part_stickman = cv2.warpPerspective(stickman, M, (h,w), borderMode = cv2.BORDER_REPLICATE)
+
+            part_imgs.append(part_img)
+            part_stickmen.append(part_stickman)
+        img = np.concatenate(part_imgs, axis = 2)
+        stickman = np.concatenate(part_stickmen, axis = 2)
+
+        """
+        bpart = ["lshoulder","lhip","rhip","rshoulder"]
+        dst = np.float32([[0.0,0.0],[0.0,1.0],[1.0,1.0],[1.0,0.0]])
+        bpart_indices = [jo.index(b) for b in bpart]
+        part_src = np.float32(joints[bpart_indices])
+        part_dst = np.float32(wh * dst)
+
+        M = cv2.getPerspectiveTransform(part_src, part_dst)
+        img = cv2.warpPerspective(img, M, (h,w), borderMode = cv2.BORDER_REPLICATE)
+        stickman = cv2.warpPerspective(stickman, M, (h,w), borderMode = cv2.BORDER_REPLICATE)
+        """
+
+        """
+        # center of possible rescaling
+        c = joints[jo.index("cneck")]
+
+        # find valid body part for scale estimation
+        a = joints[jo.index("lshoulder")]
+        b = joints[jo.index("lhip")]
+        target_length = 33.0
+        if not valid_joints(a,b):
+            a = joints[jo.index("rshoulder")]
+            b = joints[jo.index("rhip")]
+            target_length = 33.0
+        if not valid_joints(a,b):
+            a = joints[jo.index("rshoulder")]
+            b = joints[jo.index("relbow")]
+            target_length = 33.0 / 2
+        if not valid_joints(a,b):
+            a = joints[jo.index("lshoulder")]
+            b = joints[jo.index("lelbow")]
+            target_length = 33.0 / 2
+        if not valid_joints(a,b):
+            a = joints[jo.index("lwrist")]
+            b = joints[jo.index("lelbow")]
+            target_length = 33.0 / 2
+        if not valid_joints(a,b):
+            a = joints[jo.index("rwrist")]
+            b = joints[jo.index("relbow")]
+            target_length = 33.0 / 2
+
+        if valid_joints(a,b):
+            body_length = np.linalg.norm(b - a)
+            factor = target_length / body_length
+            img = zoom(img, factor, center = c)
+            stickman = zoom(stickman, factor, center = c)
+        else:
+            factor = 0.25
+            img = zoom(img, factor, center = c)
+            stickman = zoom(stickman, factor, center = c)
+        """
+
+        out_imgs.append(img)
+        out_stickmen.append(stickman)
+    out_imgs = np.stack(out_imgs)
+    out_stickmen = np.stack(out_stickmen)
+    return out_imgs, out_stickmen
+
+
 def make_mask_img(img_shape, jo, joints):
     scale_factor = img_shape[1] / 128
     masks = 3*[None]
@@ -310,10 +420,7 @@ class IndexFlow(object):
             mask = True,
             fill_batches = True,
             shuffle = True,
-            return_keys = ["imgs", "joints"],
-            prefix = None,
-            seed = 1):
-        self.prng = RandomState(seed)
+            return_keys = ["imgs", "joints"]):
         self.shape = shape
         self.batch_size = self.shape[0]
         self.img_shape = self.shape[1:]
@@ -327,8 +434,6 @@ class IndexFlow(object):
         self.return_keys = return_keys
 
         self.jo = self.index["joint_order"]
-        if prefix is None:
-            prefix = ""
         self.indices = np.array(
                 [i for i in range(len(self.index["train"]))
                     if self._filter(i)])
@@ -420,11 +525,10 @@ class IndexFlow(object):
             # apply mask to images
             batch["imgs"] = batch["imgs"] * batch["masks"]
 
-        valid_joints = ["lhip","rhip","lshoulder","rshoulder"]
-        valid_joint_indices = [self.jo.index(j) for j in valid_joints]
-        invalid_joint_indices = [i for i in range(len(self.jo)) if i not in valid_joint_indices]
-        for i in range(len(batch["joints_coordinates"])):
-            batch["joints_coordinates"][i][invalid_joint_indices,:] = -100.0
+
+        imgs, joints = normalize(batch["imgs"], batch["joints_coordinates"], batch["joints"], self.jo)
+        batch["norm_imgs"] = imgs
+        batch["norm_joints"] = joints
 
         batch_list = [batch[k] for k in self.return_keys]
         return batch_list
@@ -433,7 +537,7 @@ class IndexFlow(object):
     def shuffle(self):
         self.batch_start = 0
         if self.shuffle_:
-            self.prng.shuffle(self.indices)
+            np.random.shuffle(self.indices)
 
 
 def get_batches(
@@ -443,10 +547,9 @@ def get_batches(
         mask,
         fill_batches = True,
         shuffle = True,
-        return_keys = ["imgs", "joints"],
-        prefix = None):
+        return_keys = ["imgs", "joints", "norm_imgs", "norm_joints"]):
     """Buffered IndexFlow."""
-    flow = IndexFlow(shape, index_path, train, mask, fill_batches, shuffle, return_keys,prefix)
+    flow = IndexFlow(shape, index_path, train, mask, fill_batches, shuffle, return_keys)
     return BufferedWrapper(flow)
 
 
