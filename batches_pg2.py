@@ -206,6 +206,11 @@ def get_crop(bpart, joints, jo, wh, o_w, o_h, ar = 1.0):
             bpart = ["rhip"]
             bpart_indices = [jo.index(b) for b in bpart]
             part_src = np.float32(joints[bpart_indices])
+        elif bpart[0] == "lshoulder" and bpart[1] == "rshoulder" and bpart[2] == "cnose": 
+            bpart = ["lshoulder", "rshoulder", "rshoulder"]
+            bpart_indices = [jo.index(b) for b in bpart]
+            part_src = np.float32(joints[bpart_indices])
+
 
     if not valid_joints(part_src):
             return None
@@ -220,16 +225,33 @@ def get_crop(bpart, joints, jo, wh, o_w, o_h, ar = 1.0):
         pass
     elif part_src.shape[0] == 3:
         # lshoulder, rshoulder, cnose
-        segment = part_src[1] - part_src[0]
-        normal = np.array([-segment[1],segment[0]])
-        if normal[1] > 0.0:
-            normal = -normal
+        if bpart == ["lshoulder", "rshoulder", "rshoulder"]:
+            segment = part_src[1] - part_src[0]
+            normal = np.array([-segment[1],segment[0]])
+            if normal[1] > 0.0:
+                normal = -normal
 
-        a = part_src[0] + normal
-        b = part_src[0]
-        c = part_src[1]
-        d = part_src[1] + normal
-        part_src = np.float32([a,b,c,d])
+            a = part_src[0] + normal
+            b = part_src[0]
+            c = part_src[1]
+            d = part_src[1] + normal
+            part_src = np.float32([a,b,c,d])
+        else:
+            assert bpart == ["lshoulder", "rshoulder", "cnose"]
+            neck = 0.5*(part_src[0] + part_src[1])
+            neck_to_nose = part_src[2] - neck
+            part_src = np.float32([neck + 2*neck_to_nose, neck])
+
+            # segment box
+            segment = part_src[1] - part_src[0]
+            normal = np.array([-segment[1],segment[0]])
+            alpha = 1.0 / 2.0
+            a = part_src[0] + alpha*normal
+            b = part_src[0] - alpha*normal
+            c = part_src[1] - alpha*normal
+            d = part_src[1] + alpha*normal
+            #part_src = np.float32([a,b,c,d])
+            part_src = np.float32([b,c,d,a])
     else:
         assert part_src.shape[0] == 2
 
@@ -270,7 +292,7 @@ def normalize(imgs, coords, stickmen, jo):
 
         bparts = [
                 ["lshoulder","lhip","rhip","rshoulder"],
-                ["lshoulder", "rshoulder", "rshoulder"],
+                ["lshoulder", "rshoulder", "cnose"],
                 ["lshoulder","lelbow"],
                 ["lelbow", "lwrist"],
                 ["rshoulder","relbow"],
