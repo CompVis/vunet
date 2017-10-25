@@ -12,7 +12,7 @@ import PIL
 
 import nn
 import models
-from batches_pg2 import get_batches, plot_batch, postprocess
+from batches_pg2_vis import get_batches, plot_batch, postprocess
 import deeploss
 
 
@@ -514,7 +514,7 @@ if __name__ == "__main__":
 
     elif opt.mode == "transfer":
         if not opt.checkpoint:
-            raise Exception("Testing requires --checkpoint")
+            opt.checkpoint = "log/2017-10-04T16:01:46/checkpoints/model.ckpt-100000"
         batch_size = opt.batch_size
         img_shape = 2*[opt.spatial_size] + [3]
         data_shape = [batch_size] + img_shape
@@ -523,7 +523,8 @@ if __name__ == "__main__":
         model = Model(opt, out_dir, logger)
         model.restore_graph(opt.checkpoint)
 
-        for step in trange(1):
+        ids = ["00038", "00281", "01166", "x", "06909", "y", "07586", "07607", "z", "09874"]
+        for step in trange(10):
             X_batch, C_batch = next(valid_batches)
             bs = X_batch.shape[0]
             imgs = list()
@@ -544,7 +545,7 @@ if __name__ == "__main__":
             imgs = np.stack(imgs, axis = 0)
             plot_batch(imgs, os.path.join(
                 out_dir,
-                "transfer.png"))
+                "transfer_{}.png".format(ids[step])))
 
     elif opt.mode == "mcmc":
         if not opt.checkpoint:
