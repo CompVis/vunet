@@ -129,9 +129,14 @@ class Model(object):
         # infer latent code
         hs = self.enc_up_pass(infer_x, infer_c, **kwargs)
         es, qs, zs_posterior = self.enc_down_pass(hs, **kwargs)
+        zs_mean = list(qs)
         # generate from inferred latent code and conditioning
         gs = self.dec_up_pass(generate_c, **kwargs)
-        ds, ps, zs_prior = self.dec_down_pass(gs, zs_posterior, training = True, **kwargs)
+        use_mean = True
+        if use_mean:
+            ds, ps, zs_prior = self.dec_down_pass(gs, zs_mean, training = True, **kwargs)
+        else:
+            ds, ps, zs_prior = self.dec_down_pass(gs, zs_posterior, training = True, **kwargs)
         params = self.dec_params(ds[-1], **kwargs)
         return params
 
@@ -155,14 +160,12 @@ class Model(object):
                 self.lr_decay_begin, self.lr_decay_end,
                 self.initial_lr, 0.0,
                 0.0, self.initial_lr)
-        """
         kl_weight = nn.make_linear_var(
                 global_step,
                 self.lr_decay_begin, self.lr_decay_end // 2,
-                0.0, 1.0,
-                1.0, 1.0)
-        """
-        kl_weight = tf.to_float(0.1)
+                1e-3, 1.0,
+                1e-3, 1.0)
+        #kl_weight = tf.to_float(0.1)
 
         # initialization
         self.x_init = tf.placeholder(
@@ -324,14 +327,35 @@ class Model(object):
                     self.best_loss = validation_loss
                     self.make_checkpoint(global_step, prefix = "best_")
         if global_step % self.test_frequency == 0:
-            # testing
             if self.valid_batches is not None:
+                # testing
                 X_batch, C_batch = next(self.valid_batches)
                 x_gen = self.test(C_batch)
                 for k in x_gen:
                     plot_batch(x_gen[k], os.path.join(
                         self.out_dir,
                         "testing_{}_{:07}.png".format(k, global_step)))
+                # transfer
+                bs = X_batch.shape[0]
+                imgs = list()
+                imgs.append(np.zeros_like(X_batch[0,...]))
+                for r in range(bs):
+                    imgs.append(C_batch[r,...])
+                for i in range(bs):
+                    x_infer = X_batch[i,...]
+                    c_infer = C_batch[i,...]
+                    imgs.append(x_infer)
+
+                    x_infer_batch = x_infer[None,...].repeat(bs, axis = 0)
+                    c_infer_batch = c_infer[None,...].repeat(bs, axis = 0)
+                    c_generate_batch = C_batch
+                    results = model.transfer(x_infer_batch, c_infer_batch, c_generate_batch)
+                    for j in range(bs):
+                        imgs.append(results[j,...])
+                imgs = np.stack(imgs, axis = 0)
+                plot_batch(imgs, os.path.join(
+                    out_dir,
+                    "transfer_{:07}.png".format(global_step)))
         if global_step % self.ckpt_frequency == 0:
             self.make_checkpoint(global_step)
 
@@ -386,12 +410,11 @@ class Model(object):
             infer_c = self.c
             generate_c = self.c_generator
             transfer_params = self.transfer_pass(infer_x, infer_c, generate_c)
-            transfer_mean_sample = self.sample(transfer_params)
-            self.img_ops["transfer"] = transfer_mean_sample
+            self.transfer_mean_sample = self.sample(transfer_params)
             self._init_transfer = True
 
         return session.run(
-                self.img_ops["transfer"], {
+                self.transfer_mean_sample, {
                     self.x: x_encode,
                     self.c: c_encode,
                     self.c_generator: c_decode})
@@ -415,7 +438,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_freq", default = 250, type = int, help = "frequency to log")
     parser.add_argument("--ckpt_freq", default = 1000, type = int, help = "frequency to checkpoint")
     parser.add_argument("--test_freq", default = 1000, type = int, help = "frequency to test")
-    parser.add_argument("--drop_prob", default = 0.5, type = float, help = "Dropout probability")
+    parser.add_argument("--drop_prob", default = 0.1, type = float, help = "Dropout probability")
     parser.add_argument("--mask", dest = "mask", action = "store_true", help = "Use masked data")
     parser.add_argument("--no-mask", dest = "mask", action = "store_false", help = "Do not use mask")
     parser.set_defaults(mask = True)
@@ -514,7 +537,7 @@ if __name__ == "__main__":
 
     elif opt.mode == "transfer":
         if not opt.checkpoint:
-            opt.checkpoint = "log/2017-10-04T16:01:46/checkpoints/model.ckpt-100000"
+            opt.checkpoint = "log/2017-10-19T23:41:03/checkpoints/model.ckpt-100000"
         batch_size = opt.batch_size
         img_shape = 2*[opt.spatial_size] + [3]
         data_shape = [batch_size] + img_shape
