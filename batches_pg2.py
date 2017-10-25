@@ -298,9 +298,7 @@ def normalize(imgs, coords, stickmen, jo):
                 ["rshoulder","relbow"],
                 ["relbow", "rwrist"],
                 ["lhip", "lknee"],
-                ["lknee", "lankle"],
-                ["rhip", "rknee"],
-                ["rknee", "rankle"]]
+                ["rhip", "rknee"]]
         ar = 0.5
 
         part_imgs = list()
@@ -456,16 +454,28 @@ class IndexFlow(object):
         self.return_keys = return_keys
 
         self.jo = self.index["joint_order"]
-        self.indices = np.array(
-                [i for i in range(len(self.index["train"]))
-                    if self.index["train"][i] == self.train])
         # rescale joint coordinates to image shape
         h,w = self.img_shape[:2]
         wh = np.array([[[w,h]]])
         self.index["joints"] = self.index["joints"] * wh
 
+        self.indices = np.array(
+                [i for i in range(len(self.index["train"]))
+                    if self._filter(i)])
+
         self.n = self.indices.shape[0]
         self.shuffle()
+
+
+    def _filter(self, i):
+        good = True
+        good = good and (self.index["train"][i] == self.train)
+        joints = self.index["joints"][i]
+        required_joints = ["lshoulder","rshoulder","lhip","rhip"]
+        joint_indices = [self.jo.index(b) for b in required_joints]
+        joints = np.float32(joints[joint_indices])
+        good = good and valid_joints(joints)
+        return good
 
 
     def __next__(self):

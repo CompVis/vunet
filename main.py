@@ -15,6 +15,8 @@ import models
 from batches_pg2 import get_batches, plot_batch, postprocess
 import deeploss
 
+N_BOXES = 8
+
 
 def init_logging(out_base_dir):
     # get unique output directory based on current time
@@ -59,7 +61,7 @@ class Model(object):
         self.batch_size = opt.batch_size
         self.img_shape = 2*[opt.spatial_size] + [3]
         redux = 2
-        self.imgn_shape = 2*[opt.spatial_size//(2**redux)] + [30]
+        self.imgn_shape = 2*[opt.spatial_size//(2**redux)] + [N_BOXES*3]
         self.init_batches = opt.init_batches
 
         self.initial_lr = opt.lr
@@ -251,7 +253,7 @@ class Model(object):
         self.img_ops["test_sample"] = test_sample
         self.img_ops["x"] = self.x
         self.img_ops["c"] = self.c
-        for i in range(10):
+        for i in range(N_BOXES):
             self.img_ops["xn{}".format(i)] = self.xn[:,:,:,i*3:(i+1)*3]
         for i, l in enumerate(self.vgg19.losses):
             self.log_ops["vgg_loss_{}".format(i)] = l
