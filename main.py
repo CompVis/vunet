@@ -575,7 +575,7 @@ if __name__ == "__main__":
 
     elif opt.mode == "transfer":
         if not opt.checkpoint:
-            opt.checkpoint = "log/2017-10-25T16:31:50/checkpoints/model.ckpt-22000"
+            opt.checkpoint = "log/2017-10-25T16:31:50/checkpoints/model.ckpt-100000"
         batch_size = opt.batch_size
         img_shape = 2*[opt.spatial_size] + [3]
         data_shape = [batch_size] + img_shape
