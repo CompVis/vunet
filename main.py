@@ -12,7 +12,7 @@ import PIL
 
 import nn
 import models
-from batches_pg2_vis import get_batches, plot_batch, postprocess
+from batches_pg2 import get_batches, plot_batch, postprocess
 import deeploss
 
 N_BOXES = 8
@@ -575,7 +575,7 @@ if __name__ == "__main__":
 
     elif opt.mode == "transfer":
         if not opt.checkpoint:
-            opt.checkpoint = "log/2017-10-25T16:31:50/checkpoints/model.ckpt-100000"
+            opt.checkpoint = "log/2017-10-24T16:34:09/checkpoints/model.ckpt-100000"
         batch_size = opt.batch_size
         img_shape = 2*[opt.spatial_size] + [3]
         data_shape = [batch_size] + img_shape
