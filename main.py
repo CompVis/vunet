@@ -40,22 +40,6 @@ def init_logging(out_base_dir):
     return out_dir, logger
 
 
-class Timer(object):
-    def __init__(self):
-        self.tick()
-
-
-    def tick(self):
-        self.start_time = time.time()
-
-
-    def tock(self):
-        self.end_time = time.time()
-        time_since_tick = self.end_time - self.start_time
-        self.tick()
-        return time_since_tick
-
-
 class Model(object):
     def __init__(self, opt, out_dir, logger):
         self.batch_size = opt.batch_size
@@ -159,7 +143,6 @@ class Model(object):
 
     def define_graph(self):
         # pretrained net for perceptual loss
-        #self.vgg19 = deeploss.JigsawFeatures(session)
         self.vgg19 = deeploss.VGG19Features(session)
 
         global_step = tf.Variable(0, trainable = False, name = "global_step")
@@ -253,8 +236,6 @@ class Model(object):
         self.img_ops["test_sample"] = test_sample
         self.img_ops["x"] = self.x
         self.img_ops["c"] = self.c
-        for i in range(N_BOXES):
-            self.img_ops["xn{}".format(i)] = self.xn[:,:,:,i*3:(i+1)*3]
         for i, l in enumerate(self.vgg19.losses):
             self.log_ops["vgg_loss_{}".format(i)] = l
 
@@ -416,21 +397,6 @@ class Model(object):
         return results
 
 
-    def mcmc(self, c_batch, n_iters = 10):
-        results = dict()
-        results["cond"] = c_batch
-        sample = session.run(
-            self.img_ops["test_sample"], {self.c: c_batch})
-        results["sample_{}".format(0)] = sample
-        for i in range(n_iters - 1):
-            sample = session.run(
-                    self.img_ops["sample"], {
-                        self.x: sample,
-                        self.c: c_batch})
-            results["sample_{:03}".format(i+1)] = sample
-        return results
-
-
     def reconstruct(self, x_batch, c_batch):
         return session.run(
                 self.reconstruction,
@@ -477,9 +443,6 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_freq", default = 1000, type = int, help = "frequency to checkpoint")
     parser.add_argument("--test_freq", default = 1000, type = int, help = "frequency to test")
     parser.add_argument("--drop_prob", default = 0.1, type = float, help = "Dropout probability")
-    parser.add_argument("--mask", dest = "mask", action = "store_true", help = "Use masked data")
-    parser.add_argument("--no-mask", dest = "mask", action = "store_false", help = "Do not use mask")
-    parser.set_defaults(mask = True)
     opt = parser.parse_args()
 
     if not os.path.exists(opt.data_index):
@@ -494,9 +457,9 @@ if __name__ == "__main__":
         data_shape = [batch_size] + img_shape
         init_shape = [opt.init_batches * batch_size] + img_shape
 
-        batches = get_batches(data_shape, opt.data_index, mask = opt.mask, train = True)
-        init_batches = get_batches(init_shape, opt.data_index, mask = opt.mask, train = True)
-        valid_batches = get_batches(data_shape, opt.data_index, mask = opt.mask, train = False)
+        batches = get_batches(data_shape, opt.data_index, train = True)
+        init_batches = get_batches(init_shape, opt.data_index, train = True)
+        valid_batches = get_batches(data_shape, opt.data_index, train = False)
         logger.info("Number of training samples: {}".format(batches.n))
         logger.info("Number of validation samples: {}".format(valid_batches.n))
         if valid_batches.n == 0:
@@ -514,7 +477,7 @@ if __name__ == "__main__":
         batch_size = opt.batch_size
         img_shape = 2*[opt.spatial_size] + [3]
         data_shape = [batch_size] + img_shape
-        valid_batches = get_batches(data_shape, opt.data_index, mask = opt.mask, train = False)
+        valid_batches = get_batches(data_shape, opt.data_index, train = False)
         model = Model(opt, out_dir, logger)
         model.restore_graph(opt.checkpoint)
 
@@ -525,105 +488,5 @@ if __name__ == "__main__":
                 plot_batch(x_gen[k], os.path.join(
                     out_dir,
                     "testing_{}_{:07}.png".format(k, i)))
-    elif opt.mode == "add_reconstructions":
-        if not opt.checkpoint:
-            raise Exception("Testing requires --checkpoint")
-        batch_size = opt.batch_size
-        img_shape = 2*[opt.spatial_size] + [3]
-        data_shape = [batch_size] + img_shape
-        batches = get_batches(data_shape, opt.data_index, mask = opt.mask,
-                train = True, return_index_id = True)
-        valid_batches = get_batches(data_shape, opt.data_index,
-                mask = opt.mask, train = False, return_index_id = True)
-        model = Model(opt, out_dir, logger)
-        model.restore_graph(opt.checkpoint)
-
-        # open index file to get image filenames and update with
-        # reconstruction data
-        with open(opt.data_index, "rb") as f:
-            index = pickle.load(f)
-        index_dir = os.path.dirname(opt.data_index)
-        index["reconstruction"] = len(index["imgs"]) * [None]
-        index["sample"] = len(index["imgs"]) * [None]
-
-        def process_batches(batches):
-            for i in trange(math.ceil(batches.n / batch_size)):
-                X_batch, C_batch, I_batch = next(batches)
-                # reconstructions
-                R_batch = model.reconstruct(X_batch, C_batch)
-                R_batch = postprocess(R_batch) # to uint8 for saving
-                # samples from pose
-                S_batch = model.test(C_batch)["test_sample"]
-                S_batch = postprocess(S_batch) # to uint8 for saving
-                for batch_i, i in enumerate(I_batch):
-                    original_fname = index["imgs"][i]
-                    reconstr_fname = original_fname.rsplit(".", 1)[0] + "_reconstruction.png"
-                    reconstr_path = os.path.join(index_dir, reconstr_fname)
-                    sample_fname = original_fname.rsplit(".", 1)[0] + "_sample.png"
-                    sample_path = os.path.join(index_dir, sample_fname)
-                    index["reconstruction"][i] = reconstr_path
-                    index["sample"][i] = sample_path
-                    PIL.Image.fromarray(R_batch[batch_i,...]).save(reconstr_path)
-                    PIL.Image.fromarray(S_batch[batch_i,...]).save(sample_path)
-        process_batches(batches)
-        process_batches(valid_batches)
-
-        # write updated index
-        with open(opt.data_index, "wb") as f:
-            pickle.dump(index, f)
-        logger.info("Wrote {}".format(opt.data_index))
-
-    elif opt.mode == "transfer":
-        if not opt.checkpoint:
-            opt.checkpoint = "log/2017-10-24T16:34:09/checkpoints/model.ckpt-100000"
-        batch_size = opt.batch_size
-        img_shape = 2*[opt.spatial_size] + [3]
-        data_shape = [batch_size] + img_shape
-        valid_batches = get_batches(data_shape, opt.data_index,
-                mask = opt.mask, train = False)
-        model = Model(opt, out_dir, logger)
-        model.restore_graph(opt.checkpoint)
-
-        ids = ["00038", "00281", "01166", "x", "06909", "y", "07586", "07607", "z", "09874"]
-        for step in trange(10):
-            X_batch, C_batch, XN_batch, CN_batch = next(valid_batches)
-            bs = X_batch.shape[0]
-            imgs = list()
-            imgs.append(np.zeros_like(X_batch[0,...]))
-            for r in range(bs):
-                imgs.append(C_batch[r,...])
-            for i in range(bs):
-                x_infer = XN_batch[i,...]
-                c_infer = CN_batch[i,...]
-                imgs.append(X_batch[i,...])
-
-                x_infer_batch = x_infer[None,...].repeat(bs, axis = 0)
-                c_infer_batch = c_infer[None,...].repeat(bs, axis = 0)
-                c_generate_batch = C_batch
-                results = model.transfer(x_infer_batch, c_infer_batch, c_generate_batch)
-                for j in range(bs):
-                    imgs.append(results[j,...])
-            imgs = np.stack(imgs, axis = 0)
-            plot_batch(imgs, os.path.join(
-                out_dir,
-                "transfer_{}.png".format(ids[step])))
-
-    elif opt.mode == "mcmc":
-        if not opt.checkpoint:
-            raise Exception("Testing requires --checkpoint")
-        batch_size = opt.batch_size
-        img_shape = 2*[opt.spatial_size] + [3]
-        data_shape = [batch_size] + img_shape
-        valid_batches = get_batches(data_shape, opt.data_index, mask = opt.mask, train = False)
-        model = Model(opt, out_dir, logger)
-        model.restore_graph(opt.checkpoint)
-
-        for i in trange(valid_batches.n // batch_size):
-            X_batch, C_batch = next(valid_batches)
-            x_gen = model.mcmc(C_batch)
-            for k in x_gen:
-                plot_batch(x_gen[k], os.path.join(
-                    out_dir,
-                    "mcmc_{}_{:07}.png".format(k, i)))
     else:
         raise NotImplemented()

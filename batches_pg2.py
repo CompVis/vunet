@@ -60,14 +60,6 @@ def preprocess(x):
     return np.cast[np.float32](x / 127.5 - 1.0)
 
 
-def preprocess_mask(x):
-    """From uint8 mask to [0,1]."""
-    mask = np.cast[np.float32](x / 255.0)
-    if mask.shape[-1] == 3:
-        mask = np.amax(mask, axis = -1, keepdims = True)
-    return mask
-
-
 def postprocess(x):
     """[-1,1] to uint8."""
     x = (x + 1.0) / 2.0
@@ -112,8 +104,6 @@ def make_joint_img(img_shape, jo, joints):
     for i in range(3):
         imgs.append(np.zeros(img_shape[:2], dtype = "uint8"))
 
-    assert("cnose" in jo)
-    # MSCOCO
     body = ["lhip", "lshoulder", "rshoulder", "rhip"]
     body_pts = np.array([[joints[jo.index(part),:] for part in body]])
     if np.min(body_pts) >= 0:
@@ -172,24 +162,6 @@ def make_joint_img(img_shape, jo, joints):
 def valid_joints(*joints):
     j = np.stack(joints)
     return (j >= 0).all()
-
-
-def zoom(img, factor, center = None):
-    shape = img.shape[:2]
-    if center is None or not valid_joints(center):
-        center = np.array(shape) / 2
-    e1 = np.array([1,0])
-    e2 = np.array([0,1])
-
-    dst_center = np.array(center)
-    dst_e1 = e1 * factor
-    dst_e2 = e2 * factor
-
-    src = np.float32([center, center+e1, center+e2])
-    dst = np.float32([dst_center, dst_center+dst_e1, dst_center+dst_e2])
-    M = cv2.getAffineTransform(src, dst)
-
-    return cv2.warpAffine(img, M, shape, flags = cv2.INTER_AREA, borderMode = cv2.BORDER_REPLICATE)
 
 
 def get_crop(bpart, joints, jo, wh, o_w, o_h, ar = 1.0):
@@ -272,7 +244,6 @@ def get_crop(bpart, joints, jo, wh, o_w, o_h, ar = 1.0):
 
 
 def normalize(imgs, coords, stickmen, jo):
-
     out_imgs = list()
     out_stickmen = list()
 
@@ -317,58 +288,6 @@ def normalize(imgs, coords, stickmen, jo):
         img = np.concatenate(part_imgs, axis = 2)
         stickman = np.concatenate(part_stickmen, axis = 2)
 
-        """
-        bpart = ["lshoulder","lhip","rhip","rshoulder"]
-        dst = np.float32([[0.0,0.0],[0.0,1.0],[1.0,1.0],[1.0,0.0]])
-        bpart_indices = [jo.index(b) for b in bpart]
-        part_src = np.float32(joints[bpart_indices])
-        part_dst = np.float32(wh * dst)
-
-        M = cv2.getPerspectiveTransform(part_src, part_dst)
-        img = cv2.warpPerspective(img, M, (h,w), borderMode = cv2.BORDER_REPLICATE)
-        stickman = cv2.warpPerspective(stickman, M, (h,w), borderMode = cv2.BORDER_REPLICATE)
-        """
-
-        """
-        # center of possible rescaling
-        c = joints[jo.index("cneck")]
-
-        # find valid body part for scale estimation
-        a = joints[jo.index("lshoulder")]
-        b = joints[jo.index("lhip")]
-        target_length = 33.0
-        if not valid_joints(a,b):
-            a = joints[jo.index("rshoulder")]
-            b = joints[jo.index("rhip")]
-            target_length = 33.0
-        if not valid_joints(a,b):
-            a = joints[jo.index("rshoulder")]
-            b = joints[jo.index("relbow")]
-            target_length = 33.0 / 2
-        if not valid_joints(a,b):
-            a = joints[jo.index("lshoulder")]
-            b = joints[jo.index("lelbow")]
-            target_length = 33.0 / 2
-        if not valid_joints(a,b):
-            a = joints[jo.index("lwrist")]
-            b = joints[jo.index("lelbow")]
-            target_length = 33.0 / 2
-        if not valid_joints(a,b):
-            a = joints[jo.index("rwrist")]
-            b = joints[jo.index("relbow")]
-            target_length = 33.0 / 2
-
-        if valid_joints(a,b):
-            body_length = np.linalg.norm(b - a)
-            factor = target_length / body_length
-            img = zoom(img, factor, center = c)
-            stickman = zoom(stickman, factor, center = c)
-        else:
-            factor = 0.25
-            img = zoom(img, factor, center = c)
-            stickman = zoom(stickman, factor, center = c)
-        """
-
         out_imgs.append(img)
         out_stickmen.append(stickman)
     out_imgs = np.stack(out_imgs)
@@ -376,71 +295,16 @@ def normalize(imgs, coords, stickmen, jo):
     return out_imgs, out_stickmen
 
 
-def make_mask_img(img_shape, jo, joints):
-    scale_factor = img_shape[1] / 128
-    masks = 3*[None]
-    for i in range(3):
-        masks[i] = np.zeros(img_shape[:2], dtype = "uint8")
-
-    body = ["lhip", "lshoulder", "rshoulder", "rhip"]
-    body_pts = np.array([[joints[jo.index(part),:] for part in body]], dtype = np.int32)
-    cv2.fillPoly(masks[1], body_pts, 255)
-
-    head = ["lshoulder", "chead", "rshoulder"]
-    head_pts = np.array([[joints[jo.index(part),:] for part in head]], dtype = np.int32)
-    cv2.fillPoly(masks[2], head_pts, 255)
-
-    thickness = int(15 * scale_factor)
-    lines = [[
-        ("rankle", "rknee"),
-        ("rknee", "rhip"),
-        ("rhip", "lhip"),
-        ("lhip", "lknee"),
-        ("lknee", "lankle") ], [
-            ("rhip", "rshoulder"),
-            ("rshoulder", "relbow"),
-            ("relbow", "rwrist"),
-            ("rhip", "lhip"),
-            ("rshoulder", "lshoulder"),
-            ("lhip", "lshoulder"),
-            ("lshoulder", "lelbow"),
-            ("lelbow", "lwrist")], [
-                ("rshoulder", "chead"),
-                ("rshoulder", "lshoulder"),
-                ("lshoulder", "chead")]]
-    for i in range(len(lines)):
-        for j in range(len(lines[i])):
-            line = [jo.index(lines[i][j][0]), jo.index(lines[i][j][1])]
-            a = tuple(np.int_(joints[line[0]]))
-            b = tuple(np.int_(joints[line[1]]))
-            cv2.line(masks[i], a, b, color = 255, thickness = thickness)
-
-    for i in range(3):
-        r = int(11 * scale_factor)
-        if r % 2 == 0:
-            r = r + 1
-        masks[i] = cv2.GaussianBlur(masks[i], (r,r), 0)
-        maxmask = np.max(masks[i])
-        if maxmask > 0:
-            masks[i] = masks[i] / maxmask
-    mask = np.stack(masks, axis = -1)
-    mask = np.uint8(255 * mask)
-
-    return mask
-
-
 class IndexFlow(object):
     """Batches from index file."""
-
     def __init__(
             self,
             shape,
             index_path,
             train,
-            mask = True,
             fill_batches = True,
             shuffle = True,
-            return_keys = ["imgs", "joints"]):
+            return_keys = ["imgs", "joints", "norm_imgs", "norm_joints"]):
         self.shape = shape
         self.batch_size = self.shape[0]
         self.img_shape = self.shape[1:]
@@ -448,7 +312,6 @@ class IndexFlow(object):
             self.index = pickle.load(f)
         self.basepath = os.path.dirname(index_path)
         self.train = train
-        self.mask = mask
         self.fill_batches = fill_batches
         self.shuffle_ = shuffle
         self.return_keys = return_keys
@@ -487,7 +350,7 @@ class IndexFlow(object):
         if self.fill_batches and batch_indices.shape[0] != self.batch_size:
             n_missing = self.batch_size - batch_indices.shape[0]
             batch_indices = np.concatenate([batch_indices, self.indices[:n_missing]], axis = 0)
-            assert(batch_indices.shape[0] == self.batch_size)
+            assert batch_indices.shape[0] == self.batch_size
         batch_indices = np.array(batch_indices)
         batch["indices"] = batch_indices
 
@@ -502,6 +365,7 @@ class IndexFlow(object):
         batch["imgs"] = list()
         for i in batch_indices:
             fname = self.index["imgs"][i]
+            # TODO this should be more uniform
             traintest = "train" if self.train else "test"
             path = os.path.join(self.basepath, "..", "original", "filted_up_{}".format(traintest), fname)
             batch["imgs"].append(load_img(path, target_size = self.img_shape))
@@ -518,25 +382,6 @@ class IndexFlow(object):
             batch["joints"].append(img)
         batch["joints"] = np.stack(batch["joints"])
         batch["joints"] = preprocess(batch["joints"])
-
-        if False and self.mask:
-            if "masks" in self.index:
-                batch_masks = list()
-                for i in batch_indices:
-                    fname = self.index["masks"][i]
-                    path = os.path.join(self.basepath, fname)
-                    batch_masks.append(load_img(path, target_size = self.img_shape))
-            else:
-                # generate mask based on joint coordinates
-                batch_masks = list()
-                for joints in batch["joints_coordinates"]:
-                    mask = make_mask_img(self.img_shape, self.jo, joints)
-                    batch_masks.append(mask)
-            batch["masks"] = np.stack(batch_masks)
-            batch["masks"] = preprocess_mask(batch["masks"])
-            # apply mask to images
-            batch["imgs"] = batch["imgs"] * batch["masks"]
-
 
         imgs, joints = normalize(batch["imgs"], batch["joints_coordinates"], batch["joints"], self.jo)
         batch["norm_imgs"] = imgs
@@ -556,12 +401,11 @@ def get_batches(
         shape,
         index_path,
         train,
-        mask,
         fill_batches = True,
         shuffle = True,
         return_keys = ["imgs", "joints", "norm_imgs", "norm_joints"]):
     """Buffered IndexFlow."""
-    flow = IndexFlow(shape, index_path, train, mask, fill_batches, shuffle, return_keys)
+    flow = IndexFlow(shape, index_path, train, fill_batches, shuffle, return_keys)
     return BufferedWrapper(flow)
 
 
@@ -575,27 +419,7 @@ if __name__ == "__main__":
             shape = (16, 128, 128, 3),
             index_path = sys.argv[1],
             train = True,
-            mask = False,
             shuffle = True)
-    X, C = next(batches)
-    plot_batch(X, "unmasked.png")
+    X, C, XN, CN = next(batches)
+    plot_batch(X, "images.png")
     plot_batch(C, "joints.png")
-
-    """
-    batches = get_batches(
-            shape = (16, 128, 128, 3),
-            index_path = sys.argv[1],
-            train = True,
-            mask = True)
-    X, C = next(batches)
-    plot_batch(X, "masked.png")
-
-    batches = get_batches(
-            shape = (16, 32, 32, 3),
-            index_path = sys.argv[1],
-            train = True,
-            mask = True)
-    X, C = next(batches)
-    plot_batch(X, "masked32.png")
-    plot_batch(C, "joints32.png")
-    """
