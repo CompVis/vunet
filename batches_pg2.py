@@ -364,10 +364,8 @@ class IndexFlow(object):
         # load images
         batch["imgs"] = list()
         for i in batch_indices:
-            fname = self.index["imgs"][i]
-            # TODO this should be more uniform
-            traintest = "train" if self.train else "test"
-            path = os.path.join(self.basepath, "..", "original", "filted_up_{}".format(traintest), fname)
+            relpath = self.index["imgs"][i]
+            path = os.path.join(self.basepath, relpath)
             batch["imgs"].append(load_img(path, target_size = self.img_shape))
         batch["imgs"] = np.stack(batch["imgs"])
         batch["imgs"] = preprocess(batch["imgs"])
