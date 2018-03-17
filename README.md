@@ -26,8 +26,8 @@ containing a `index.p` file. To train the model, run
 
     python main.py --data_index <path_to_index.p>
 
-By default this saves images and checkpoints to `log/<current date>`. To
-adapt log directories and other options, see
+By default, images and checkpoints are saved to `log/<current date>`. To
+change the log directory and other options, see
 
     python main.py -h
 
@@ -49,4 +49,7 @@ dictionary with the following keys:
 
 `joint_order` should contain
 
-    'ranke', 'rknee', 'rhip', 'rshoulder', 'relbow', 'rwrist', 'reye', 'lanke', 'lknee', 'lhip', 'lshoulder', 'lelbow', 'lwrist', 'leye', 'cnose'
+    'rankle', 'rknee', 'rhip', 'rshoulder', 'relbow', 'rwrist', 'reye', 'lankle', 'lknee', 'lhip', 'lshoulder', 'lelbow', 'lwrist', 'leye', 'cnose'
+
+and images without valid values for `rhip, rshoulder, lhip, lshoulder` are
+ignored.
