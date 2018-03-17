@@ -7,6 +7,9 @@ import cv2
 import math
 
 
+n_boxes = 8
+
+
 class BufferedWrapper(object):
     """Fetch next batch asynchronuously to avoid bottleneck during GPU
     training."""
