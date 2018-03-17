@@ -24,8 +24,10 @@ def preprocess_input(x):
 
 
 class VGG19Features(object):
-    def __init__(self, session, feature_layers = None, feature_weights = None):
+    def __init__(self, session, use_gram,
+            feature_layers = None, feature_weights = None, gram_weights = None):
         K.set_session(session)
+        self.use_gram = use_gram
         self.base_model = VGG19(
                 include_top = False,
                 weights='imagenet')
@@ -47,7 +49,10 @@ class VGG19Features(object):
                 outputs = features)
         if feature_weights is None:
             feature_weights = len(feature_layers) * [1.0]
+        if gram_weights is None:
+            gram_weights = len(feature_layers) * [0.1]
         self.feature_weights = feature_weights
+        self.gram_weights = gram_weights
         assert len(self.feature_weights) == len(features)
 
         self.variables = self.base_model.weights
@@ -67,6 +72,18 @@ class VGG19Features(object):
         return features
 
 
+    def grams(self, fs):
+        gs = list()
+        for f in fs:
+            bs, h, w, c = f.shape.as_list()
+            f = tf.reshape(f, [bs, h*w, c])
+            ft = tf.transpose(f, [0,2,1])
+            g = tf.matmul(ft, f)
+            g = g / (4.0*h*w)
+            gs.append(g)
+        return gs
+
+
     def make_loss_op(self, x, y):
         """x, y should be rgb tensors in [-1,1]."""
         x = preprocess_input(x)
@@ -75,14 +92,25 @@ class VGG19Features(object):
         y = preprocess_input(y)
         y_features = self.model(y)
 
+        x_grams = self.grams(x_features)
+        y_grams = self.grams(y_features)
+
         losses = [
                 tf.reduce_mean(tf.abs(xf - yf)) for xf, yf in zip(
                     x_features, y_features)]
+        gram_losses = [
+                tf.reduce_mean(tf.abs(xg - yg)) for xg, yg in zip(
+                    x_grams, y_grams)]
+
         for i in range(len(losses)):
             losses[i] = self.feature_weights[i] * losses[i]
+            gram_losses[i] = self.gram_weights[i] * gram_losses[i]
         loss = tf.add_n(losses)
+        if self.use_gram:
+            loss = loss + tf.add_n(gram_losses)
 
         self.losses = losses
+        self.gram_losses = gram_losses
 
         return loss
 

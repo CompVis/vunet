@@ -57,6 +57,8 @@ class Model(object):
         self.checkpoint_best = False
 
         self.dropout_p = opt.drop_prob
+        self.retrain = opt.retrain
+        self.gram = opt.gram
 
         self.best_loss = float("inf")
         self.checkpoint_dir = os.path.join(self.out_dir, "checkpoints")
@@ -140,7 +142,7 @@ class Model(object):
 
     def define_graph(self):
         # pretrained net for perceptual loss
-        self.vgg19 = deeploss.VGG19Features(session)
+        self.vgg19 = deeploss.VGG19Features(session, self.gram)
 
         global_step = tf.Variable(0, trainable = False, name = "global_step")
         lr = nn.make_linear_var(
@@ -275,6 +277,9 @@ class Model(object):
         self.saver = tf.train.Saver(self.variables)
         self.saver.restore(session, restore_path)
         self.logger.info("Restored model from {}".format(restore_path))
+        if self.retrain:
+            session.run(tf.assign(self.log_ops["global_step"], 0))
+            self.logger.info("Reset global_step")
 
 
     def fit(self, batches, valid_batches = None):
@@ -438,6 +443,11 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_freq", default = 1000, type = int, help = "frequency to checkpoint")
     parser.add_argument("--test_freq", default = 1000, type = int, help = "frequency to test")
     parser.add_argument("--drop_prob", default = 0.1, type = float, help = "Dropout probability")
+    parser.add_argument("--retrain", dest = "retrain", action = "store_true", help = "reset global_step to zero")
+    parser.add_argument("--gram", dest = "gram", action = "store_true", help = "use loss based on gram matrices")
+    parser.set_defaults(retrain = False)
+    parser.set_defaults(gram = False)
+
     opt = parser.parse_args()
 
     if not os.path.exists(opt.data_index):
