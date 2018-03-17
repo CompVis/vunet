@@ -60,14 +60,6 @@ def preprocess(x):
     return np.cast[np.float32](x / 127.5 - 1.0)
 
 
-def preprocess_mask(x):
-    """From uint8 mask to [0,1]."""
-    mask = np.cast[np.float32](x / 255.0)
-    if mask.shape[-1] == 3:
-        mask = np.amax(mask, axis = -1, keepdims = True)
-    return mask
-
-
 def postprocess(x):
     """[-1,1] to uint8."""
     x = (x + 1.0) / 2.0
@@ -93,6 +85,9 @@ def tile(X, rows, cols):
 
 def plot_batch(X, out_path):
     """Save batch of images tiled."""
+    n_channels = X.shape[3]
+    if n_channels > 3:
+        X = X[:,:,:,np.random.choice(n_channels, size = 3)]
     X = postprocess(X)
     rc = math.sqrt(X.shape[0])
     rows = cols = math.ceil(rc)
@@ -109,103 +104,52 @@ def make_joint_img(img_shape, jo, joints):
     for i in range(3):
         imgs.append(np.zeros(img_shape[:2], dtype = "uint8"))
 
-    if len(jo) == 2:
-        # Head image
-        line = ("cneck", "chead")
-        l = [jo.index(line[0]), jo.index(line[1])]
-        a = tuple(np.int_(joints[l[0]]))
-        b = tuple(np.int_(joints[l[1]]))
-        cv2.line(imgs[0], a, b, color = 255, thickness = thickness)
-        cv2.line(imgs[1], a, b, color = 255, thickness = thickness)
-        cv2.line(imgs[2], a, b, color = 255, thickness = thickness)
-    elif "chead" in jo:
-        # MPII
-
-        # fill body
-        body = ["lhip", "lshoulder", "rshoulder", "rhip"]
-        body_pts = np.array([[joints[jo.index(part),:] for part in body]])
+    body = ["lhip", "lshoulder", "rshoulder", "rhip"]
+    body_pts = np.array([[joints[jo.index(part),:] for part in body]])
+    if np.min(body_pts) >= 0:
         body_pts = np.int_(body_pts)
         cv2.fillPoly(imgs[2], body_pts, 255)
 
-        right_lines = [
-                ("rankle", "rknee"),
-                ("rknee", "rhip"),
-                ("rhip", "rshoulder"),
-                ("rshoulder", "relbow"),
-                ("relbow", "rwrist")]
-        for line in right_lines:
-            l = [jo.index(line[0]), jo.index(line[1])]
+    right_lines = [
+            ("rankle", "rknee"),
+            ("rknee", "rhip"),
+            ("rhip", "rshoulder"),
+            ("rshoulder", "relbow"),
+            ("relbow", "rwrist")]
+    for line in right_lines:
+        l = [jo.index(line[0]), jo.index(line[1])]
+        if np.min(joints[l]) >= 0:
             a = tuple(np.int_(joints[l[0]]))
             b = tuple(np.int_(joints[l[1]]))
             cv2.line(imgs[0], a, b, color = 255, thickness = thickness)
 
-        left_lines = [
-                ("lankle", "lknee"),
-                ("lknee", "lhip"),
-                ("lhip", "lshoulder"),
-                ("lshoulder", "lelbow"),
-                ("lelbow", "lwrist")]
-        for line in left_lines:
-            l = [jo.index(line[0]), jo.index(line[1])]
+    left_lines = [
+            ("lankle", "lknee"),
+            ("lknee", "lhip"),
+            ("lhip", "lshoulder"),
+            ("lshoulder", "lelbow"),
+            ("lelbow", "lwrist")]
+    for line in left_lines:
+        l = [jo.index(line[0]), jo.index(line[1])]
+        if np.min(joints[l]) >= 0:
             a = tuple(np.int_(joints[l[0]]))
             b = tuple(np.int_(joints[l[1]]))
             cv2.line(imgs[1], a, b, color = 255, thickness = thickness)
 
-        rs = joints[jo.index("rshoulder")]
-        ls = joints[jo.index("lshoulder")]
-        cn = joints[jo.index("chead")]
-        neck = 0.5*(rs+ls)
-        a = tuple(np.int_(neck))
-        b = tuple(np.int_(cn))
-        cv2.line(imgs[0], a, b, color = 127, thickness = thickness)
-        cv2.line(imgs[1], a, b, color = 127, thickness = thickness)
-    else:
-        assert("cnose" in jo)
-        # MSCOCO
-        body = ["lhip", "lshoulder", "rshoulder", "rhip"]
-        body_pts = np.array([[joints[jo.index(part),:] for part in body]])
-        if np.min(body_pts) >= 0:
-            body_pts = np.int_(body_pts)
-            cv2.fillPoly(imgs[2], body_pts, 255)
-
-        right_lines = [
-                ("rankle", "rknee"),
-                ("rknee", "rhip"),
-                ("rhip", "rshoulder"),
-                ("rshoulder", "relbow"),
-                ("relbow", "rwrist")]
-        for line in right_lines:
-            l = [jo.index(line[0]), jo.index(line[1])]
-            if np.min(joints[l]) >= 0:
-                a = tuple(np.int_(joints[l[0]]))
-                b = tuple(np.int_(joints[l[1]]))
-                cv2.line(imgs[0], a, b, color = 255, thickness = thickness)
-
-        left_lines = [
-                ("lankle", "lknee"),
-                ("lknee", "lhip"),
-                ("lhip", "lshoulder"),
-                ("lshoulder", "lelbow"),
-                ("lelbow", "lwrist")]
-        for line in left_lines:
-            l = [jo.index(line[0]), jo.index(line[1])]
-            if np.min(joints[l]) >= 0:
-                a = tuple(np.int_(joints[l[0]]))
-                b = tuple(np.int_(joints[l[1]]))
-                cv2.line(imgs[1], a, b, color = 255, thickness = thickness)
-
-        rs = joints[jo.index("rshoulder")]
-        ls = joints[jo.index("lshoulder")]
-        cn = joints[jo.index("cnose")]
-        neck = 0.5*(rs+ls)
-        a = tuple(np.int_(neck))
-        b = tuple(np.int_(cn))
+    rs = joints[jo.index("rshoulder")]
+    ls = joints[jo.index("lshoulder")]
+    cn = joints[jo.index("cnose")]
+    neck = 0.5*(rs+ls)
+    a = tuple(np.int_(neck))
+    b = tuple(np.int_(cn))
+    if np.min(a) >= 0 and np.min(b) >= 0:
         cv2.line(imgs[0], a, b, color = 127, thickness = thickness)
         cv2.line(imgs[1], a, b, color = 127, thickness = thickness)
 
-        cn = tuple(np.int_(cn))
-        leye = tuple(np.int_(joints[jo.index("leye")]))
-        reye = tuple(np.int_(joints[jo.index("reye")]))
+    cn = tuple(np.int_(cn))
+    leye = tuple(np.int_(joints[jo.index("leye")]))
+    reye = tuple(np.int_(joints[jo.index("reye")]))
+    if np.min(reye) >= 0 and np.min(leye) >= 0 and np.min(cn) >= 0:
         cv2.line(imgs[0], cn, reye, color = 255, thickness = thickness)
         cv2.line(imgs[1], cn, leye, color = 255, thickness = thickness)
 
@@ -215,71 +159,152 @@ def make_joint_img(img_shape, jo, joints):
     return img
 
 
-def make_mask_img(img_shape, jo, joints):
-    scale_factor = img_shape[1] / 128
-    masks = 3*[None]
-    for i in range(3):
-        masks[i] = np.zeros(img_shape[:2], dtype = "uint8")
+def valid_joints(*joints):
+    j = np.stack(joints)
+    return (j >= 0).all()
 
-    body = ["lhip", "lshoulder", "rshoulder", "rhip"]
-    body_pts = np.array([[joints[jo.index(part),:] for part in body]], dtype = np.int32)
-    cv2.fillPoly(masks[1], body_pts, 255)
 
-    head = ["lshoulder", "chead", "rshoulder"]
-    head_pts = np.array([[joints[jo.index(part),:] for part in head]], dtype = np.int32)
-    cv2.fillPoly(masks[2], head_pts, 255)
+def get_crop(bpart, joints, jo, wh, o_w, o_h, ar = 1.0):
+    bpart_indices = [jo.index(b) for b in bpart]
+    part_src = np.float32(joints[bpart_indices])
 
-    thickness = int(15 * scale_factor)
-    lines = [[
-        ("rankle", "rknee"),
-        ("rknee", "rhip"),
-        ("rhip", "lhip"),
-        ("lhip", "lknee"),
-        ("lknee", "lankle") ], [
-            ("rhip", "rshoulder"),
-            ("rshoulder", "relbow"),
-            ("relbow", "rwrist"),
-            ("rhip", "lhip"),
-            ("rshoulder", "lshoulder"),
-            ("lhip", "lshoulder"),
-            ("lshoulder", "lelbow"),
-            ("lelbow", "lwrist")], [
-                ("rshoulder", "chead"),
-                ("rshoulder", "lshoulder"),
-                ("lshoulder", "chead")]]
-    for i in range(len(lines)):
-        for j in range(len(lines[i])):
-            line = [jo.index(lines[i][j][0]), jo.index(lines[i][j][1])]
-            a = tuple(np.int_(joints[line[0]]))
-            b = tuple(np.int_(joints[line[1]]))
-            cv2.line(masks[i], a, b, color = 255, thickness = thickness)
+    # fall backs
+    if not valid_joints(part_src):
+        if bpart[0] == "lhip" and bpart[1] == "lknee":
+            bpart = ["lhip"]
+            bpart_indices = [jo.index(b) for b in bpart]
+            part_src = np.float32(joints[bpart_indices])
+        elif bpart[0] == "rhip" and bpart[1] == "rknee": 
+            bpart = ["rhip"]
+            bpart_indices = [jo.index(b) for b in bpart]
+            part_src = np.float32(joints[bpart_indices])
+        elif bpart[0] == "lshoulder" and bpart[1] == "rshoulder" and bpart[2] == "cnose": 
+            bpart = ["lshoulder", "rshoulder", "rshoulder"]
+            bpart_indices = [jo.index(b) for b in bpart]
+            part_src = np.float32(joints[bpart_indices])
 
-    for i in range(3):
-        r = int(11 * scale_factor)
-        if r % 2 == 0:
-            r = r + 1
-        masks[i] = cv2.GaussianBlur(masks[i], (r,r), 0)
-        maxmask = np.max(masks[i])
-        if maxmask > 0:
-            masks[i] = masks[i] / maxmask
-    mask = np.stack(masks, axis = -1)
-    mask = np.uint8(255 * mask)
 
-    return mask
+    if not valid_joints(part_src):
+            return None
+
+    if part_src.shape[0] == 1:
+        # leg fallback
+        a = part_src[0]
+        b = np.float32([a[0],o_h - 1])
+        part_src = np.float32([a,b])
+
+    if part_src.shape[0] == 4:
+        pass
+    elif part_src.shape[0] == 3:
+        # lshoulder, rshoulder, cnose
+        if bpart == ["lshoulder", "rshoulder", "rshoulder"]:
+            segment = part_src[1] - part_src[0]
+            normal = np.array([-segment[1],segment[0]])
+            if normal[1] > 0.0:
+                normal = -normal
+
+            a = part_src[0] + normal
+            b = part_src[0]
+            c = part_src[1]
+            d = part_src[1] + normal
+            part_src = np.float32([a,b,c,d])
+        else:
+            assert bpart == ["lshoulder", "rshoulder", "cnose"]
+            neck = 0.5*(part_src[0] + part_src[1])
+            neck_to_nose = part_src[2] - neck
+            part_src = np.float32([neck + 2*neck_to_nose, neck])
+
+            # segment box
+            segment = part_src[1] - part_src[0]
+            normal = np.array([-segment[1],segment[0]])
+            alpha = 1.0 / 2.0
+            a = part_src[0] + alpha*normal
+            b = part_src[0] - alpha*normal
+            c = part_src[1] - alpha*normal
+            d = part_src[1] + alpha*normal
+            #part_src = np.float32([a,b,c,d])
+            part_src = np.float32([b,c,d,a])
+    else:
+        assert part_src.shape[0] == 2
+
+        segment = part_src[1] - part_src[0]
+        normal = np.array([-segment[1],segment[0]])
+        alpha = ar / 2.0
+        a = part_src[0] + alpha*normal
+        b = part_src[0] - alpha*normal
+        c = part_src[1] - alpha*normal
+        d = part_src[1] + alpha*normal
+        part_src = np.float32([a,b,c,d])
+
+    dst = np.float32([[0.0,0.0],[0.0,1.0],[1.0,1.0],[1.0,0.0]])
+    part_dst = np.float32(wh * dst)
+
+    M = cv2.getPerspectiveTransform(part_src, part_dst)
+    return M
+
+
+def normalize(imgs, coords, stickmen, jo):
+    out_imgs = list()
+    out_stickmen = list()
+
+    bs = len(imgs)
+    for i in range(bs):
+        img = imgs[i]
+        joints = coords[i]
+        stickman = stickmen[i]
+
+        h,w = img.shape[:2]
+        o_h = h
+        o_w = w
+        h = h // 4
+        w = w // 4
+        wh = np.array([w,h])
+        wh = np.expand_dims(wh, 0)
+
+        bparts = [
+                ["lshoulder","lhip","rhip","rshoulder"],
+                ["lshoulder", "rshoulder", "cnose"],
+                ["lshoulder","lelbow"],
+                ["lelbow", "lwrist"],
+                ["rshoulder","relbow"],
+                ["relbow", "rwrist"],
+                ["lhip", "lknee"],
+                ["rhip", "rknee"]]
+        ar = 0.5
+
+        part_imgs = list()
+        part_stickmen = list()
+        for bpart in bparts:
+            part_img = np.zeros((h,w,3))
+            part_stickman = np.zeros((h,w,3))
+            M = get_crop(bpart, joints, jo, wh, o_w, o_h, ar)
+
+            if M is not None:
+                part_img = cv2.warpPerspective(img, M, (h,w), borderMode = cv2.BORDER_REPLICATE)
+                part_stickman = cv2.warpPerspective(stickman, M, (h,w), borderMode = cv2.BORDER_REPLICATE)
+
+            part_imgs.append(part_img)
+            part_stickmen.append(part_stickman)
+        img = np.concatenate(part_imgs, axis = 2)
+        stickman = np.concatenate(part_stickmen, axis = 2)
+
+        out_imgs.append(img)
+        out_stickmen.append(stickman)
+    out_imgs = np.stack(out_imgs)
+    out_stickmen = np.stack(out_stickmen)
+    return out_imgs, out_stickmen
 
 
 class IndexFlow(object):
     """Batches from index file."""
-
     def __init__(
             self,
             shape,
             index_path,
             train,
-            mask = True,
             fill_batches = True,
             shuffle = True,
-            return_keys = ["imgs", "joints"]):
+            return_keys = ["imgs", "joints", "norm_imgs", "norm_joints"]):
         self.shape = shape
         self.batch_size = self.shape[0]
         self.img_shape = self.shape[1:]
@@ -287,20 +312,33 @@ class IndexFlow(object):
             self.index = pickle.load(f)
         self.basepath = os.path.dirname(index_path)
         self.train = train
-        self.mask = mask
         self.fill_batches = fill_batches
         self.shuffle_ = shuffle
         self.return_keys = return_keys
 
         self.jo = self.index["joint_order"]
+        # rescale joint coordinates to image shape
+        h,w = self.img_shape[:2]
+        wh = np.array([[[w,h]]])
+        self.index["joints"] = self.index["joints"] * wh
+
         self.indices = np.array(
                 [i for i in range(len(self.index["train"]))
-                    if self.index["train"][i] == self.train])
-        # rescale joint coordinates to image shape
-        self.index["joints"] = [v * self.img_shape[0] / 256 for v in self.index["joints"]]
+                    if self._filter(i)])
 
         self.n = self.indices.shape[0]
         self.shuffle()
+
+
+    def _filter(self, i):
+        good = True
+        good = good and (self.index["train"][i] == self.train)
+        joints = self.index["joints"][i]
+        required_joints = ["lshoulder","rshoulder","lhip","rhip"]
+        joint_indices = [self.jo.index(b) for b in required_joints]
+        joints = np.float32(joints[joint_indices])
+        good = good and valid_joints(joints)
+        return good
 
 
     def __next__(self):
@@ -312,7 +350,7 @@ class IndexFlow(object):
         if self.fill_batches and batch_indices.shape[0] != self.batch_size:
             n_missing = self.batch_size - batch_indices.shape[0]
             batch_indices = np.concatenate([batch_indices, self.indices[:n_missing]], axis = 0)
-            assert(batch_indices.shape[0] == self.batch_size)
+            assert batch_indices.shape[0] == self.batch_size
         batch_indices = np.array(batch_indices)
         batch["indices"] = batch_indices
 
@@ -326,8 +364,8 @@ class IndexFlow(object):
         # load images
         batch["imgs"] = list()
         for i in batch_indices:
-            fname = self.index["imgs"][i]
-            path = os.path.join(self.basepath, fname)
+            relpath = self.index["imgs"][i]
+            path = os.path.join(self.basepath, relpath)
             batch["imgs"].append(load_img(path, target_size = self.img_shape))
         batch["imgs"] = np.stack(batch["imgs"])
         batch["imgs"] = preprocess(batch["imgs"])
@@ -343,34 +381,9 @@ class IndexFlow(object):
         batch["joints"] = np.stack(batch["joints"])
         batch["joints"] = preprocess(batch["joints"])
 
-        if self.mask:
-            if "masks" in self.index:
-                batch_masks = list()
-                for i in batch_indices:
-                    fname = self.index["masks"][i]
-                    path = os.path.join(self.basepath, fname)
-                    batch_masks.append(load_img(path, target_size = self.img_shape))
-            else:
-                # generate mask based on joint coordinates
-                batch_masks = list()
-                for joints in batch["joints_coordinates"]:
-                    mask = make_mask_img(self.img_shape, self.jo, joints)
-                    batch_masks.append(mask)
-            batch["masks"] = np.stack(batch_masks)
-            batch["masks"] = preprocess_mask(batch["masks"])
-            # apply mask to images
-            batch["imgs"] = batch["imgs"] * batch["masks"]
-
-        if "reconstruction" in self.return_keys:
-            assert self.mask # reconstructions were generated for masked data
-            # load reconstructions
-            batch["reconstruction"] = list()
-            for i in batch_indices:
-                fname = self.index["reconstruction"][i]
-                path = os.path.join(self.basepath, fname)
-                batch["reconstruction"].append(load_img(path, target_size = self.img_shape))
-            batch["reconstruction"] = np.stack(batch["reconstruction"])
-            batch["reconstruction"] = preprocess(batch["reconstruction"])
+        imgs, joints = normalize(batch["imgs"], batch["joints_coordinates"], batch["joints"], self.jo)
+        batch["norm_imgs"] = imgs
+        batch["norm_joints"] = joints
 
         batch_list = [batch[k] for k in self.return_keys]
         return batch_list
@@ -386,12 +399,11 @@ def get_batches(
         shape,
         index_path,
         train,
-        mask,
         fill_batches = True,
         shuffle = True,
-        return_keys = ["imgs", "joints"]):
+        return_keys = ["imgs", "joints", "norm_imgs", "norm_joints"]):
     """Buffered IndexFlow."""
-    flow = IndexFlow(shape, index_path, train, mask, fill_batches, shuffle, return_keys)
+    flow = IndexFlow(shape, index_path, train, fill_batches, shuffle, return_keys)
     return BufferedWrapper(flow)
 
 
@@ -405,38 +417,7 @@ if __name__ == "__main__":
             shape = (16, 128, 128, 3),
             index_path = sys.argv[1],
             train = True,
-            mask = False)
-    X, C = next(batches)
-    plot_batch(X, "unmasked.png")
+            shuffle = True)
+    X, C, XN, CN = next(batches)
+    plot_batch(X, "images.png")
     plot_batch(C, "joints.png")
-
-    batches = get_batches(
-            shape = (16, 128, 128, 3),
-            index_path = sys.argv[1],
-            train = True,
-            mask = True)
-    X, C = next(batches)
-    plot_batch(X, "masked.png")
-
-    batches = get_batches(
-            shape = (16, 32, 32, 3),
-            index_path = sys.argv[1],
-            train = True,
-            mask = True)
-    X, C = next(batches)
-    plot_batch(X, "masked32.png")
-    plot_batch(C, "joints32.png")
-
-    try:
-        batches = get_batches(
-                shape = (16, 64, 64, 3),
-                index_path = sys.argv[1],
-                train = True,
-                mask = True,
-                return_keys = ["imgs", "joints", "reconstruction"])
-        X, C, R = next(batches)
-        plot_batch(X, "masked64.png")
-        plot_batch(C, "joints64.png")
-        plot_batch(R, "recons64.png")
-    except KeyError:
-        print("No reconstructions present.")
