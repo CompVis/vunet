@@ -1,3 +1,7 @@
+# A Variational U-Net for Conditional Appearance and Shape Generation
+
+This repository contains code for the paper
+
 
 
 ## Other datasets
