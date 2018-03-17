@@ -8,10 +8,36 @@ The model learns to infer appearance from a single image and can synthesize
 images with that appearance in different poses.
 
 ![teaser](assets/cvpr2018_large.gif)
+
 [HQ](https://gfycat.com/ThinUntriedGoldenmantledgroundsquirrel)
 
+## Requirements
 
-## Other datasets
+The code was developed with Python 3. Dependencies can be installed with
+
+    pip install -r requirements.txt # TODO
+
+Please note that the code does not work with `tensorflow >= 1.3.0`. 
+
+## Training
+
+[Download](TODO) and unpack the desired dataset. This results in a folder
+containing a `index.p` file. To train the model, run
+
+    python main.py --data_index <path_to_index.p>
+
+By default this saves images and checkpoints to `log/<current date>`. To
+adapt log directories and other options, see
+
+    python main.py -h
+
+To obtain images of optimal quality it is recommended to train for a second
+round with a loss based on Gram matrices. To do so run
+
+    python main.py --data_index <path_to_index.p> --checkpoint <path to checkpoint of first round> --retrain --gram
+
+
+## Other Datasets
 
 To be able to train the model on your own dataset you must provide a pickled
 dictionary with the following keys:
