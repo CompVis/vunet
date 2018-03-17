@@ -7,7 +7,8 @@ This repository contains code for the paper
 The model learns to infer appearance from a single image and can synthesize
 images with that appearance in different poses.
 
-![teaser](assets/teaser.png)
+![teaser](assets/cvpr2018_large.gif)
+[HQ](https://gfycat.com/ThinUntriedGoldenmantledgroundsquirrel)
 
 
 ## Other datasets
