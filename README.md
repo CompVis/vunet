@@ -2,6 +2,12 @@
 
 This repository contains code for the paper
 
+**A Variational U-Net for Conditional Appearance and Shape Generation**
+
+The model learns to infer appearance from a single image and can synthesize
+images with that appearance in different poses.
+
+![teaser](assets/teaser.png)
 
 
 ## Other datasets
