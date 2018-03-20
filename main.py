@@ -6,6 +6,7 @@ session = tf.Session(config = config)
 import os, logging, shutil, datetime
 import glob
 import argparse
+import yaml
 import numpy as np
 from tqdm import tqdm, trange
 
@@ -38,27 +39,26 @@ def init_logging(out_base_dir):
 
 
 class Model(object):
-    def __init__(self, opt, out_dir, logger):
-        self.batch_size = opt.batch_size
-        self.img_shape = 2*[opt.spatial_size] + [3]
+    def __init__(self, config, out_dir, logger):
+        self.config = config
+        self.batch_size = config["batch_size"]
+        self.img_shape = 2*[config["spatial_size"]] + [3]
         redux = 2
-        self.imgn_shape = 2*[opt.spatial_size//(2**redux)] + [n_boxes*3]
-        self.init_batches = opt.init_batches
+        self.imgn_shape = 2*[config["spatial_size"]//(2**redux)] + [n_boxes*3]
+        self.init_batches = config["init_batches"]
 
-        self.initial_lr = opt.lr
-        self.lr_decay_begin = opt.lr_decay_begin
-        self.lr_decay_end = opt.lr_decay_end
+        self.initial_lr = config["lr"]
+        self.lr_decay_begin = config["lr_decay_begin"]
+        self.lr_decay_end = config["lr_decay_end"]
 
         self.out_dir = out_dir
         self.logger = logger
-        self.log_frequency = opt.log_freq
-        self.ckpt_frequency = opt.ckpt_freq
-        self.test_frequency = opt.test_freq
+        self.log_frequency = config["log_freq"]
+        self.ckpt_frequency = config["ckpt_freq"]
+        self.test_frequency = config["test_freq"]
         self.checkpoint_best = False
 
-        self.dropout_p = opt.drop_prob
-        self.retrain = opt.retrain
-        self.gram = opt.gram
+        self.dropout_p = config["drop_prob"]
 
         self.best_loss = float("inf")
         self.checkpoint_dir = os.path.join(self.out_dir, "checkpoints")
@@ -142,7 +142,10 @@ class Model(object):
 
     def define_graph(self):
         # pretrained net for perceptual loss
-        self.vgg19 = deeploss.VGG19Features(session, self.gram)
+        self.vgg19 = deeploss.VGG19Features(session,
+                feature_layers = self.config["feature_layers"],
+                feature_weights = self.config["feature_weights"],
+                gram_weights = self.config["gram_weights"])
 
         global_step = tf.Variable(0, trainable = False, name = "global_step")
         lr = nn.make_linear_var(
@@ -277,9 +280,11 @@ class Model(object):
         self.saver = tf.train.Saver(self.variables)
         self.saver.restore(session, restore_path)
         self.logger.info("Restored model from {}".format(restore_path))
-        if self.retrain:
-            session.run(tf.assign(self.log_ops["global_step"], 0))
-            self.logger.info("Reset global_step")
+
+
+    def reset_global_step(self):
+        session.run(tf.assign(self.log_ops["global_step"], 0))
+        self.logger.info("Reset global_step")
 
 
     def fit(self, batches, valid_batches = None):
@@ -428,53 +433,45 @@ if __name__ == "__main__":
     default_log_dir = os.path.join(os.getcwd(), "log")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_index", required = True, help = "path to data index")
+    parser.add_argument("--config", required = True, help = "path to config")
     parser.add_argument("--mode", default = "train",
             choices=["train", "test", "add_reconstructions", "transfer"])
     parser.add_argument("--log_dir", default = default_log_dir, help = "path to log into")
-    parser.add_argument("--batch_size", default = 8, type = int, help = "batch size")
-    parser.add_argument("--init_batches", default = 4, type = int, help = "number of batches for initialization")
     parser.add_argument("--checkpoint", help = "path to checkpoint to restore")
-    parser.add_argument("--spatial_size", default = 256, type = int, help = "spatial size to resize images to")
-    parser.add_argument("--lr", default = 1e-3, type = float, help = "initial learning rate")
-    parser.add_argument("--lr_decay_begin", default = 1000, type = int, help = "steps after which to begin linear lr decay")
-    parser.add_argument("--lr_decay_end", default = 100000, type = int, help = "step at which lr is zero, i.e. number of training steps")
-    parser.add_argument("--log_freq", default = 250, type = int, help = "frequency to log")
-    parser.add_argument("--ckpt_freq", default = 1000, type = int, help = "frequency to checkpoint")
-    parser.add_argument("--test_freq", default = 1000, type = int, help = "frequency to test")
-    parser.add_argument("--drop_prob", default = 0.1, type = float, help = "Dropout probability")
     parser.add_argument("--retrain", dest = "retrain", action = "store_true", help = "reset global_step to zero")
-    parser.add_argument("--gram", dest = "gram", action = "store_true", help = "use loss based on gram matrices")
     parser.set_defaults(retrain = False)
-    parser.set_defaults(gram = False)
 
     opt = parser.parse_args()
 
-    if not os.path.exists(opt.data_index):
-        raise Exception("Invalid data index: {}".format(opt.data_index))
+    with open(opt.config) as f:
+        config = yaml.load(f)
 
     out_dir, logger = init_logging(opt.log_dir)
     logger.info(opt)
+    logger.info(yaml.dump(config))
 
     if opt.mode == "train":
-        batch_size = opt.batch_size
-        img_shape = 2*[opt.spatial_size] + [3]
+        batch_size = config["batch_size"]
+        img_shape = 2*[config["spatial_size"]] + [3]
         data_shape = [batch_size] + img_shape
-        init_shape = [opt.init_batches * batch_size] + img_shape
+        init_shape = [config["init_batches"] * batch_size] + img_shape
 
-        batches = get_batches(data_shape, opt.data_index, train = True)
-        init_batches = get_batches(init_shape, opt.data_index, train = True)
-        valid_batches = get_batches(data_shape, opt.data_index, train = False)
+        data_index = config["data_index"]
+        batches = get_batches(data_shape, data_index, train = True)
+        init_batches = get_batches(init_shape, data_index, train = True)
+        valid_batches = get_batches(data_shape, data_index, train = False)
         logger.info("Number of training samples: {}".format(batches.n))
         logger.info("Number of validation samples: {}".format(valid_batches.n))
         if valid_batches.n == 0:
             valid_batches = None
 
-        model = Model(opt, out_dir, logger)
+        model = Model(config, out_dir, logger)
         if opt.checkpoint is not None:
             model.restore_graph(opt.checkpoint)
         else:
             model.init_graph(next(init_batches))
+        if opt.retrain:
+            model.reset_global_step()
         model.fit(batches, valid_batches)
     elif opt.mode == "test":
         if not opt.checkpoint:

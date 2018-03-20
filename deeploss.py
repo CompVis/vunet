@@ -24,10 +24,9 @@ def preprocess_input(x):
 
 
 class VGG19Features(object):
-    def __init__(self, session, use_gram,
+    def __init__(self, session,
             feature_layers = None, feature_weights = None, gram_weights = None):
         K.set_session(session)
-        self.use_gram = use_gram
         self.base_model = VGG19(
                 include_top = False,
                 weights='imagenet')
@@ -54,6 +53,7 @@ class VGG19Features(object):
         self.feature_weights = feature_weights
         self.gram_weights = gram_weights
         assert len(self.feature_weights) == len(features)
+        self.use_gram = np.max(self.gram_weights) > 0.0
 
         self.variables = self.base_model.weights
 
