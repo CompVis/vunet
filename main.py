@@ -463,8 +463,6 @@ if __name__ == "__main__":
         valid_batches = get_batches(data_shape, data_index, train = False, box_factor = box_factor)
         logger.info("Number of training samples: {}".format(batches.n))
         logger.info("Number of validation samples: {}".format(valid_batches.n))
-        if valid_batches.n == 0:
-            valid_batches = None
 
         model = Model(config, out_dir, logger)
         if opt.checkpoint is not None:
@@ -474,22 +472,5 @@ if __name__ == "__main__":
         if opt.retrain:
             model.reset_global_step()
         model.fit(batches, valid_batches)
-    elif opt.mode == "test":
-        if not opt.checkpoint:
-            raise Exception("Testing requires --checkpoint")
-        batch_size = opt.batch_size
-        img_shape = 2*[opt.spatial_size] + [3]
-        data_shape = [batch_size] + img_shape
-        valid_batches = get_batches(data_shape, opt.data_index, train = False, box_factor = box_factor)
-        model = Model(opt, out_dir, logger)
-        model.restore_graph(opt.checkpoint)
-
-        for i in trange(valid_batches.n // batch_size):
-            X_batch, C_batch = next(valid_batches)
-            x_gen = model.test(C_batch)
-            for k in x_gen:
-                plot_batch(x_gen[k], os.path.join(
-                    out_dir,
-                    "testing_{}_{:07}.png".format(k, i)))
     else:
         raise NotImplemented()
