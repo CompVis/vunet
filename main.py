@@ -43,8 +43,9 @@ class Model(object):
         self.config = config
         self.batch_size = config["batch_size"]
         self.img_shape = 2*[config["spatial_size"]] + [3]
-        redux = 2
-        self.imgn_shape = 2*[config["spatial_size"]//(2**redux)] + [n_boxes*3]
+        self.bottleneck_factor = config["bottleneck_factor"]
+        self.box_factor = config["box_factor"]
+        self.imgn_shape = 2*[config["spatial_size"]//(2**self.box_factor)] + [n_boxes*3]
         self.init_batches = config["init_batches"]
 
         self.initial_lr = config["lr"]
@@ -70,16 +71,15 @@ class Model(object):
 
     def define_models(self):
         n_latent_scales = 2
-        n_scales = 1 + int(np.round(np.log2(self.img_shape[0]))) - 2
+        n_scales = 1 + int(np.round(np.log2(self.img_shape[0]))) - self.bottleneck_factor
         n_filters = 32
-        redux = 2
         self.enc_up_pass = models.make_model(
                 "enc_up", models.enc_up,
-                n_scales = n_scales - redux,
-                n_filters = n_filters*2**redux)
+                n_scales = n_scales - self.box_factor,
+                n_filters = n_filters*2**self.box_factor)
         self.enc_down_pass = models.make_model(
                 "enc_down", models.enc_down,
-                n_scales = n_scales - redux,
+                n_scales = n_scales - self.box_factor,
                 n_latent_scales = n_latent_scales)
         self.dec_up_pass = models.make_model(
                 "dec_up", models.dec_up,
@@ -455,11 +455,12 @@ if __name__ == "__main__":
         img_shape = 2*[config["spatial_size"]] + [3]
         data_shape = [batch_size] + img_shape
         init_shape = [config["init_batches"] * batch_size] + img_shape
+        box_factor = config["box_factor"]
 
         data_index = config["data_index"]
-        batches = get_batches(data_shape, data_index, train = True)
-        init_batches = get_batches(init_shape, data_index, train = True)
-        valid_batches = get_batches(data_shape, data_index, train = False)
+        batches = get_batches(data_shape, data_index, train = True, box_factor = box_factor)
+        init_batches = get_batches(init_shape, data_index, train = True, box_factor = box_factor)
+        valid_batches = get_batches(data_shape, data_index, train = False, box_factor = box_factor)
         logger.info("Number of training samples: {}".format(batches.n))
         logger.info("Number of validation samples: {}".format(valid_batches.n))
         if valid_batches.n == 0:
@@ -479,7 +480,7 @@ if __name__ == "__main__":
         batch_size = opt.batch_size
         img_shape = 2*[opt.spatial_size] + [3]
         data_shape = [batch_size] + img_shape
-        valid_batches = get_batches(data_shape, opt.data_index, train = False)
+        valid_batches = get_batches(data_shape, opt.data_index, train = False, box_factor = box_factor)
         model = Model(opt, out_dir, logger)
         model.restore_graph(opt.checkpoint)
 

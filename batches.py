@@ -246,7 +246,7 @@ def get_crop(bpart, joints, jo, wh, o_w, o_h, ar = 1.0):
     return M
 
 
-def normalize(imgs, coords, stickmen, jo):
+def normalize(imgs, coords, stickmen, jo, box_factor):
     out_imgs = list()
     out_stickmen = list()
 
@@ -259,8 +259,8 @@ def normalize(imgs, coords, stickmen, jo):
         h,w = img.shape[:2]
         o_h = h
         o_w = w
-        h = h // 4
-        w = w // 4
+        h = h // 2**box_factor
+        w = w // 2**box_factor
         wh = np.array([w,h])
         wh = np.expand_dims(wh, 0)
 
@@ -305,12 +305,14 @@ class IndexFlow(object):
             shape,
             index_path,
             train,
+            box_factor,
             fill_batches = True,
             shuffle = True,
             return_keys = ["imgs", "joints", "norm_imgs", "norm_joints"]):
         self.shape = shape
         self.batch_size = self.shape[0]
         self.img_shape = self.shape[1:]
+        self.box_factor = box_factor
         with open(index_path, "rb") as f:
             self.index = pickle.load(f)
         self.basepath = os.path.dirname(index_path)
@@ -384,7 +386,7 @@ class IndexFlow(object):
         batch["joints"] = np.stack(batch["joints"])
         batch["joints"] = preprocess(batch["joints"])
 
-        imgs, joints = normalize(batch["imgs"], batch["joints_coordinates"], batch["joints"], self.jo)
+        imgs, joints = normalize(batch["imgs"], batch["joints_coordinates"], batch["joints"], self.jo, self.box_factor)
         batch["norm_imgs"] = imgs
         batch["norm_joints"] = joints
 
@@ -402,11 +404,12 @@ def get_batches(
         shape,
         index_path,
         train,
+        box_factor,
         fill_batches = True,
         shuffle = True,
         return_keys = ["imgs", "joints", "norm_imgs", "norm_joints"]):
     """Buffered IndexFlow."""
-    flow = IndexFlow(shape, index_path, train, fill_batches, shuffle, return_keys)
+    flow = IndexFlow(shape, index_path, train, box_factor, fill_batches, shuffle, return_keys)
     return BufferedWrapper(flow)
 
 
