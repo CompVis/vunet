@@ -423,6 +423,7 @@ if __name__ == "__main__":
             shape = (16, 128, 128, 3),
             index_path = sys.argv[1],
             train = True,
+            box_factor = 2,
             shuffle = True)
     X, C, XN, CN = next(batches)
     plot_batch(X, "images.png")

@@ -1,8 +1,6 @@
 import tensorflow as tf
-import numpy as np
 from tensorflow.contrib.framework.python.ops import arg_scope
 import nn
-import math
 
 
 def model_arg_scope(**kwargs):
@@ -130,118 +128,6 @@ def dec_down(
         return hs, ps, zs
 
 
-def encoder(
-        x, n_out, init = False, dropout_p = 0.5,
-        n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 128):
-    with model_arg_scope(
-            init = init, dropout_p = dropout_p, activation = activation):
-        # outputs
-        hs = []
-        # prepare input
-        xc = x
-        h = nn.nin(xc, n_filters)
-        for l in range(n_scales):
-            # level module
-            for i in range(n_residual_blocks):
-                h = nn.residual_block(h)
-                hs.append(h)
-            # prepare input to next level
-            if l + 1 < n_scales:
-                n_filters = min(2*n_filters, max_filters)
-                h = nn.downsample(h, n_filters)
-        h = nn.nin(h, n_out)
-        hs.append(h)
-        return hs
-
-
-def feature_encoder(
-        x, init = False, dropout_p = 0.5,
-        n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 128):
-    with model_arg_scope(
-            init = init, dropout_p = dropout_p, activation = activation):
-        # outputs
-        hs = []
-        # prepare input
-        xc = x
-        h = nn.nin(xc, n_filters)
-        for l in range(n_scales):
-            # level module
-            for i in range(n_residual_blocks):
-                h = nn.residual_block(h)
-                hs.append(h)
-            # prepare input to next level
-            if l + 1 < n_scales:
-                n_filters = min(2*n_filters, max_filters)
-                h = nn.downsample(h, n_filters)
-        return hs
-
-
-def cfn(
-        x, init = False, dropout_p = 0.5,
-        n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 128):
-    with model_arg_scope(
-            init = init, dropout_p = dropout_p, activation = activation):
-        # outputs
-        hs = []
-        # prepare input
-        xc = x
-        h = nn.nin(xc, n_filters)
-        for l in range(n_scales):
-            # level module
-            for i in range(n_residual_blocks):
-                h = nn.residual_block(h)
-                hs.append(h)
-            # prepare input to next level
-            if l + 1 < n_scales:
-                n_filters = min(2*n_filters, max_filters)
-                h = nn.downsample(h, n_filters)
-        h_shape = h.shape.as_list()
-        h = tf.reshape(h, [h_shape[0],1,1,h_shape[1]*h_shape[2]*h_shape[3]])
-        h = nn.nin(h, 2*max_filters)
-        hs.append(h)
-        return hs
-
-
-def cfn_features(
-        x, init = False, dropout_p = 0.5,
-        n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 128):
-    with model_arg_scope(
-            init = init, dropout_p = dropout_p, activation = activation):
-        # outputs
-        hs = []
-        # prepare input
-        xc = x
-        h = nn.nin(xc, n_filters)
-        for l in range(n_scales):
-            # level module
-            for i in range(n_residual_blocks):
-                h = nn.residual_block(h)
-                hs.append(h)
-            # prepare input to next level
-            if l + 1 < n_scales:
-                n_filters = min(2*n_filters, max_filters)
-                h = nn.downsample(h, n_filters)
-        return hs
-
-
-def classifier(
-        x, n_out, init = False, dropout_p = 0.5,
-        activation = "elu"):
-    with model_arg_scope(
-            init = init, dropout_p = dropout_p, activation = activation):
-        # outputs
-        hs = []
-        # prepare input
-        x_shape = x.shape.as_list()#tf.shape(x)
-        h = tf.reshape(x, [x_shape[0], 1, 1, x_shape[1]*x_shape[2]*x_shape[3]])
-        h = nn.activate(h)
-        h = nn.nin(h, 1024)
-        h = nn.activate(h)
-        h = nn.nin(h, n_out)
-        h = tf.reshape(h, [x_shape[0], n_out])
-        return h
-
-
 def enc_up(
         x, c, init = False, dropout_p = 0.5,
         n_scales = 1, n_residual_blocks = 2, activation = "elu", n_filters = 64, max_filters = 128):
@@ -299,23 +185,13 @@ def enc_down(
                     h = nn.residual_block(h, gz)
                     hs.append(h)
             else:
-                """ no need to go down any further
-                for i in range(n_residual_blocks // 2):
-                    h = nn.residual_block(h, gs.pop())
-                    hs.append(h)
-                """
                 break
             # prepare input to next level
             if l + 1 < n_scales:
                 n_filters = gs[-1].shape.as_list()[-1]
                 h = nn.upsample(h, n_filters)
 
-        #assert not gs # not true anymore since we break out of the loop
-
         return hs, qs, zs
-
-
-# Distributions
 
 
 def dec_parameters(
@@ -329,13 +205,6 @@ def latent_parameters(
         h, init = False, **kwargs):
     num_filters = kwargs.get("num_filters", h.shape.as_list()[-1])
     return nn.conv2d(h, num_filters)
-
-
-def logvarvar(u):
-    cutoff = tf.to_float(-5)
-    logvar = tf.maximum(cutoff, u)
-    var = tf.exp(logvar)
-    return logvar, var
 
 
 def latent_sample(p):
