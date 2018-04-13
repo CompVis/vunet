@@ -1,40 +1,44 @@
 # A Variational U-Net for Conditional Appearance and Shape Generation
 
-This repository contains code for the paper
+This repository contains training code for the CVPR 2018 spotlight
 
-**A Variational U-Net for Conditional Appearance and Shape Generation**
+[**A Variational U-Net for Conditional Appearance and Shape Generation**](https://compvis.github.io/vunet/images/vunet.pdf)
 
 The model learns to infer appearance from a single image and can synthesize
 images with that appearance in different poses.
 
 ![teaser](assets/cvpr2018_large.gif)
 
-[HQ](https://gfycat.com/ThinUntriedGoldenmantledgroundsquirrel)
+[Project page with more results](https://compvis.github.io/vunet/)
 
 ## Requirements
 
 The code was developed with Python 3. Dependencies can be installed with
 
-    pip install -r requirements.txt # TODO
+    pip install -r requirements.txt
 
 Please note that the code does not work with `tensorflow >= 1.3.0`. 
 
 ## Training
 
-[Download](TODO) and unpack the desired dataset. This results in a folder
-containing a `index.p` file. To train the model, run
+[Download](http://129.206.117.181:8080/) and unpack the desired dataset.
+This results in a folder containing an `index.p` file. Either add a symbolic
+link named `data` pointing to the download directory or adjust the path to
+the `index.p` file in the `<dataset>.yaml` config file. To train the model,
+run
 
-    python main.py --data_index <path_to_index.p>
+    python main.py --config <dataset>.yaml
 
 By default, images and checkpoints are saved to `log/<current date>`. To
 change the log directory and other options, see
 
     python main.py -h
 
-To obtain images of optimal quality it is recommended to train for a second
-round with a loss based on Gram matrices. To do so run
+and the corresponding configuration file. To obtain images of optimal
+quality it is recommended to train for a second round with a loss based on
+Gram matrices. To do so run
 
-    python main.py --data_index <path_to_index.p> --checkpoint <path to checkpoint of first round> --retrain --gram
+    python main.py --config <dataset>_retrain.yaml --retrain --checkpoint <path to checkpoint of first round>
 
 
 ## Other Datasets
