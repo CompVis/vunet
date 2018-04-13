@@ -1,0 +1,38 @@
+data_index: data/coco/index.p
+batch_size: 8
+init_batches: 4
+spatial_size: 256
+box_factor: 2
+bottleneck_factor: 2
+
+lr: 1.0e-3
+lr_decay_begin: 1000
+lr_decay_end: 100000
+log_freq: 250
+ckpt_freq: 1000
+test_freq: 1000
+drop_prob: 0.0
+
+feature_layers: [
+    "input_1",
+    "block1_conv2",
+    "block2_conv2",
+    "block3_conv2",
+    "block4_conv2",
+    "block5_conv2"]
+
+feature_weights: [
+   2.0,
+   2.0,
+   2.0,
+   2.0,
+   2.0,
+   2.0]
+
+gram_weights: [
+   0.0,
+   0.02,
+   0.02,
+   0.02,
+   0.02,
+   0.02]

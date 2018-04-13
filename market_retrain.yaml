@@ -1,0 +1,38 @@
+data_index: data/market/index.p
+batch_size: 16
+init_batches: 4
+spatial_size: 128
+box_factor: 1
+bottleneck_factor: 1
+
+lr: 1.0e-3
+lr_decay_begin: 1000
+lr_decay_end: 100000
+log_freq: 250
+ckpt_freq: 1000
+test_freq: 1000
+drop_prob: 0.1
+
+feature_layers: [
+    "input_1",
+    "block1_conv2",
+    "block2_conv2",
+    "block3_conv2",
+    "block4_conv2",
+    "block5_conv2"]
+
+feature_weights: [
+   1.0,
+   1.0,
+   1.0,
+   1.0,
+   1.0,
+   1.0]
+
+gram_weights: [
+   0.0,
+   0.05,
+   0.05,
+   0.0,
+   0.0,
+   0.0]
