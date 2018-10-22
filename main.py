@@ -19,7 +19,7 @@ import deeploss
 def init_logging(out_base_dir):
     # get unique output directory based on current time
     os.makedirs(out_base_dir, exist_ok = True)
-    now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     out_dir = os.path.join(out_base_dir, now)
     os.makedirs(out_dir, exist_ok = False)
     # copy source code to logging dir to have an idea what the run was about
