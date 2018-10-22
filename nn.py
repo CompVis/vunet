@@ -26,30 +26,20 @@ def dense(x, num_units, init_scale=1., counters={}, init=False, **kwargs):
     ''' fully connected layer '''
     name = get_name('dense', counters)
     with tf.variable_scope(name):
+        xs = x.shape.as_list()
+        V = tf.get_variable('V', [xs[1], num_units], tf.float32, tf.random_normal_initializer(0, 0.05))
+        g = tf.get_variable('g', [num_units], dtype=tf.float32, initializer=tf.constant_initializer(1.))
+        b = tf.get_variable('b', [num_units], dtype=tf.float32, initializer=tf.constant_initializer(0.))
+
+        V_norm = tf.nn.l2_normalize(V, [0])
+        x = tf.matmul(x, V_norm)
         if init:
-            xs = x.shape.as_list()
-            # data based initialization of parameters
-            V = tf.get_variable('V', [xs[1], num_units], tf.float32, tf.random_normal_initializer(0, 0.05))
-            V_norm = tf.nn.l2_normalize(V.initialized_value(), [0])
-            x_init = tf.matmul(x, V_norm)
-            m_init, v_init = tf.nn.moments(x_init, [0])
-            scale_init = init_scale / tf.sqrt(v_init + 1e-10)
-            g = tf.get_variable('g', dtype=tf.float32, initializer=scale_init)
-            b = tf.get_variable('b', dtype=tf.float32, initializer=-m_init * scale_init)
-            x_init = tf.reshape(scale_init, [1, num_units]) * (x_init - tf.reshape(m_init, [1, num_units]))
+            mean, var = tf.nn.moments(x, [0])
+            g = tf.assign(g, init_scale / tf.sqrt(var + 1e-10))
+            b = tf.assign(b, -mean * g)
+        x = tf.reshape(g, [1, num_units])*x + tf.reshape(b, [1, num_units])
 
-            return x_init
-        else:
-            V = tf.get_variable("V")
-            g = tf.get_variable("g")
-            b = tf.get_variable("b")
-            with tf.control_dependencies([tf.assert_variables_initialized([V, g, b])]):
-                # use weight normalization (Salimans & Kingma, 2016)
-                x = tf.matmul(x, V)
-                scaler = g / tf.sqrt(tf.reduce_sum(tf.square(V), [0]))
-                x = tf.reshape(scaler, [1, num_units]) * x + tf.reshape(b, [1, num_units])
-
-                return x
+        return x
 
 
 @add_arg_scope
@@ -59,32 +49,21 @@ def conv2d(x, num_filters, filter_size=[3, 3], stride=[1, 1], pad='SAME', init_s
     strides = [1] + stride + [1]
     name = get_name('conv2d', counters)
     with tf.variable_scope(name):
+        xs = x.shape.as_list()
+        V = tf.get_variable('V', filter_size + [xs[-1], num_filters],
+                            tf.float32, tf.random_normal_initializer(0, 0.05))
+        g = tf.get_variable('g', [num_filters], dtype=tf.float32, initializer=tf.constant_initializer(1.))
+        b = tf.get_variable('b', [num_filters], dtype=tf.float32, initializer=tf.constant_initializer(0.))
+
+        V_norm = tf.nn.l2_normalize(V, [0,1,2])
+        x = tf.nn.conv2d(x, V_norm, [1] + stride + [1], pad)
         if init:
-            xs = x.shape.as_list()
-            # data based initialization of parameters
-            V = tf.get_variable('V', filter_size + [xs[-1], num_filters],
-                                tf.float32, tf.random_normal_initializer(0, 0.05))
-            V_norm = tf.nn.l2_normalize(V.initialized_value(), [0, 1, 2])
-            x_init = tf.nn.conv2d(x, V_norm, strides, pad)
-            m_init, v_init = tf.nn.moments(x_init, [0, 1, 2])
-            scale_init = init_scale / tf.sqrt(v_init + 1e-8)
-            g = tf.get_variable('g', dtype=tf.float32, initializer = scale_init)
-            b = tf.get_variable('b', dtype=tf.float32, initializer = -m_init * scale_init)
-            x_init = tf.reshape(scale_init, [1, 1, 1, num_filters]) * (x_init - tf.reshape(m_init, [1, 1, 1, num_filters]))
+            mean, var = tf.nn.moments(x, [0,1,2])
+            g = tf.assign(g, init_scale / tf.sqrt(var + 1e-10))
+            b = tf.assign(b, -mean * g)
+        x = tf.reshape(g, [1, 1, 1, num_filters])*x + tf.reshape(b, [1, 1, 1, num_filters])
 
-            return x_init
-        else:
-            V = tf.get_variable("V")
-            g = tf.get_variable("g")
-            b = tf.get_variable("b")
-            with tf.control_dependencies([tf.assert_variables_initialized([V, g, b])]):
-                # use weight normalization (Salimans & Kingma, 2016)
-                W = tf.reshape(g, [1, 1, 1, num_filters]) * tf.nn.l2_normalize(V, [0, 1, 2])
-
-                # calculate convolutional layer output
-                x = tf.nn.bias_add(tf.nn.conv2d(x, W, strides, pad), b)
-
-                return x
+        return x
 
 
 @add_arg_scope
@@ -101,31 +80,22 @@ def deconv2d(x, num_filters, filter_size=[3, 3], stride=[1, 1], pad='SAME', init
         target_shape = [xs[0], xs[1] * stride[0] + filter_size[0] -
                         1, xs[2] * stride[1] + filter_size[1] - 1, num_filters]
     with tf.variable_scope(name):
+        V = tf.get_variable('V',
+                filter_size + [num_filters, xs[-1]],
+                tf.float32,
+                tf.random_normal_initializer(0, 0.05))
+        g = tf.get_variable('g', [num_filters], dtype=tf.float32, initializer=tf.constant_initializer(1.))
+        b = tf.get_variable('b', [num_filters], dtype=tf.float32, initializer=tf.constant_initializer(0.))
+
+        V_norm = tf.nn.l2_normalize(V, [0,1,3])
+        x = tf.nn.conv2d_transpose(x, V_norm, target_shape, [1] + stride + [1], pad)
         if init:
-            # data based initialization of parameters
-            V = tf.get_variable('V', filter_size + [num_filters, xs[-1]], tf.float32, tf.random_normal_initializer(0, 0.05))
-            V_norm = tf.nn.l2_normalize(V.initialized_value(), [0, 1, 3])
-            x_init = tf.nn.conv2d_transpose(x, V_norm, target_shape, strides, padding=pad)
-            m_init, v_init = tf.nn.moments(x_init, [0, 1, 2])
-            scale_init = init_scale / tf.sqrt(v_init + 1e-8)
-            g = tf.get_variable('g', dtype=tf.float32, initializer=scale_init)
-            b = tf.get_variable('b', dtype=tf.float32, initializer=-m_init * scale_init)
-            x_init = tf.reshape(scale_init, [1, 1, 1, num_filters]) * (x_init - tf.reshape(m_init, [1, 1, 1, num_filters]))
+            mean, var = tf.nn.moments(x, [0,1,2])
+            g = tf.assign(g, init_scale / tf.sqrt(var + 1e-10))
+            b = tf.assign(b, -mean * g)
+        x = tf.reshape(g, [1, 1, 1, num_filters])*x + tf.reshape(b, [1, 1, 1, num_filters])
 
-            return x_init
-        else:
-            V = tf.get_variable("V")
-            g = tf.get_variable("g")
-            b = tf.get_variable("b")
-            with tf.control_dependencies([tf.assert_variables_initialized([V, g, b])]):
-                # use weight normalization (Salimans & Kingma, 2016)
-                W = tf.reshape(g, [1, 1, num_filters, 1]) * tf.nn.l2_normalize(V, [0, 1, 3])
-
-                # calculate convolutional layer output
-                x = tf.nn.conv2d_transpose(x, W, target_shape, strides, padding=pad)
-                x = tf.nn.bias_add(x, b)
-
-                return x
+        return x
 
 
 @add_arg_scope
