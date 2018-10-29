@@ -52,12 +52,6 @@ def load_img(path, target_size):
     return x
 
 
-def save_image(X, name):
-    """Save image as png."""
-    fname = os.path.join(out_dir, name + ".png")
-    PIL.Image.fromarray(X).save(fname)
-
-
 def preprocess(x):
     """From uint8 image to [-1,1]."""
     return np.cast[np.float32](x / 127.5 - 1.0)
