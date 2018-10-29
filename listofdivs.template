@@ -1,0 +1,88 @@
+								<div class="image fit captioned">
+                  <iframe width="560" height="315" src="https://www.youtube.com/embed/F-00NhYUnH4" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                  <h3><a
+                      href="https://www.youtube.com/channel/UCbfYPyITQ-7l4upoX8nvctg">Our work
+                      covered by Two Minute Papers</a></h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <video width="89%" poster="images/hbu_video_preview.jpg" controls>
+                   <source src="images/hbu_video.mp4" type="video/mp4">
+                   Your browser does not support the video tag.
+                  </video>
+                  <h3><a
+                      href="https://compvis.github.io/hbugen2018">Follow-up
+                      work "Towards Learning a Realistic Rendering of Human
+                      Behavior" at ECCV 2018</a></h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <a href="images/vunet_poster.pdf">
+									<img src="images/vunet_poster.jpg" alt="" />
+                  </a>
+									<h3>Poster at CVPR 2018</h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <video width="89%" poster="images/video_preview.jpg" controls>
+                   <source src="images/video_generation.mp4" type="video/mp4">
+                   Your browser does not support the video tag.
+                  </video>
+									<h3>Video synthesis using appearances from COCO and poses
+                    from <a href="https://dreamdragon.github.io/PennAction/">PennAction</a></h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <a href="images/deepfashion_transfer.png">
+									<img src="images/deepfashion_transfer.jpg" alt="" />
+                  </a>
+									<h3>Transfer of appearance and pose on DeepFashion using
+                    keypoints</h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <a href="images/market_transfer.png">
+									<img src="images/market_transfer.jpg" alt="" />
+                  </a>
+									<h3>Transfer of appearance and pose on Market using
+                    keypoints</h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <a href="images/shoes_transfer.png">
+									<img src="images/shoes_transfer.jpg" alt="" />
+                  </a>
+									<h3>Transfer of appearance and pose on Shoes using edges</h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <a href="images/shoes_transfer.png">
+									<img src="images/handbags_transfer.jpg" alt="" />
+                  </a>
+									<h3>Transfer of appearance and pose on Handbags using
+                    edges</h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <a href="images/coco_transfer.png">
+									<img src="images/coco_transfer.jpg" alt="" />
+                  </a>
+									<h3>Transfer of appearance and pose on COCO using
+                    keypoints</h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <a href="images/pairs2handbags.png">
+									<img src="images/pairs2handbags.jpg" alt="" />
+                  </a>
+									<h3>Transfer across datasets using appearance from Handbags and pose from
+                    Shoes</h3>
+								</div>
+==========
+								<div class="image fit captioned">
+                  <a href="images/pairs2shoes.png">
+									<img src="images/pairs2shoes.jpg" alt="" />
+                  </a>
+									<h3>Transfer across datasets using appearance from Shoes and pose from
+                    Handbags</h3>
+								</div>

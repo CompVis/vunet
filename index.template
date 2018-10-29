@@ -1,0 +1,102 @@
+<!DOCTYPE HTML>
+<!--
+  Based on
+	Spatial by TEMPLATED
+	templated.co @templatedco
+	Released for free under the Creative Commons Attribution 3.0 license (templated.co/license)
+-->
+<html>
+	<head>
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-117339330-1"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'UA-117339330-1');
+    </script>
+
+		<title>A Variational U-Net for Conditional Appearance and Shape
+      Generation</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+	</head>
+	<body class="landing">
+
+		<!-- Banner -->
+			<section id="banner">
+        <h2>A Variational U-Net <br/> for Conditional <br/>Appearance and Shape
+        Generation</h2>
+        <p>
+        <a href="https://github.com/pesser">Patrick Esser</a>&ast;, 
+        <a href="https://www.linkedin.com/in/ekaterina-sutter-ab3847b7/">Ekaterina Sutter</a>&ast;,
+        <a href="https://hci.iwr.uni-heidelberg.de/Staff/bommer">Bj&ouml;rn Ommer</a><br/>
+        <a href="https://www.iwr.uni-heidelberg.de/">IWR, Heidelberg University</a><br/>
+        <a href="http://cvpr2018.thecvf.com/">CVPR 2018</a></p>
+			</section>
+
+			<!-- One -->
+				<section id="one" class="wrapper style1">
+					<div class="container 75%">
+						<div class="row 200%">
+							<div class="6u 12u$(medium) vert-center">
+                  <div class="container 25%">
+                    <div class="image fit captioned align-center">
+                      <a href="images/vunet.pdf">
+                        <img src="images/paper.jpg" alt="" />
+                      </a>
+                      <a href="https://arxiv.org/abs/1804.04694">arXiv</a>
+                      <div class="headerDivider"></div>
+                      <a href="images/vunet.bib">BibTeX</a>
+                      <div class="headerDivider"></div>
+                      <a href="https://github.com/CompVis/vunet">GitHub</a>
+                      <br/>
+                      &ast; equal contribution
+                    </div>
+                  </div>
+							</div>
+							<div class="6u$ 12u$(medium)">
+                <h1>Abstract</h1>
+                <p>Deep generative models have demonstrated great performance in image synthesis. However, results deteriorate in case of spatial deformations, since they generate images of objects directly, rather than modeling the intricate interplay of their inherent shape and appearance. We present a conditional U-Net for shape-guided image generation, conditioned on the output of a variational autoencoder for appearance.  The approach is trained end-to-end on images, without requiring samples of the same object with varying pose or appearance. Experiments show that the model enables conditional image generation and transfer.  Therefore, either shape or appearance can be retained from a query image, while freely altering the other. Moreover, appearance can be sampled due to its stochastic latent representation, while preserving shape. In quantitative and qualitative experiments on COCO, DeepFashion, shoes, Market-1501 and handbags, the approach demonstrates significant improvements over the state-of-the-art.
+                </p>
+							</div>
+						</div>
+					</div>
+				</section>
+
+			<!-- Two -->
+				<section id="two" class="wrapper style2 special">
+					<div class="container">
+						<header class="major">
+							<h2>Results</h2>
+							<p>and applications of our model.</p>
+						</header>
+
+            __TEMPLATE_STRING__
+
+				  </div>
+				</section>
+
+
+			<!-- Four -->
+				<section id="four" class="wrapper style3 special">
+					<div class="container">
+						<header class="major">
+							<h2>Acknowledgement</h2>
+              <p>This work has been supported in part by the Heidelberg
+              Academy of Science <br/>and a hardware donation from NVIDIA.
+              This page is based on a design by <a href="http://templated.co">TEMPLATED</a>.</p>
+						</header>
+					</div>
+				</section>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/skel.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>
