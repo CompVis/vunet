@@ -24,8 +24,14 @@ Please note that the code does not work with `tensorflow >= 1.3.0`.
 [Download](http://129.206.117.181:8080/) and unpack the desired dataset.
 This results in a folder containing an `index.p` file. Either add a symbolic
 link named `data` pointing to the download directory or adjust the path to
-the `index.p` file in the `<dataset>.yaml` config file. To train the model,
-run
+the `index.p` file in the `<dataset>.yaml` config file.
+
+For convenience, you can also run
+
+    ./download_data.sh <dataset> <store_dir>
+
+which will perform the above steps automatically. `<dataset>` can be one of
+`coco`, `deepfashion` or `market`. To train the model, run
 
     python main.py --config <dataset>.yaml
 
