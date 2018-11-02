@@ -172,7 +172,7 @@ class Model(object):
         self.cn_init = tf.placeholder(
                 tf.float32,
                 shape = [self.init_batches * self.batch_size] + self.imgn_shape)
-        _ = self.train_forward_pass(
+        self.dd_init_op = self.train_forward_pass(
                 self.x_init, self.c_init,
                 self.xn_init, self.cn_init,
                 dropout_p = self.dropout_p, init = True)
@@ -265,11 +265,13 @@ class Model(object):
                 session.graph)
         self.saver = tf.train.Saver(self.variables)
         initializer_op = tf.variables_initializer(self.variables)
-        session.run(initializer_op, {
+        feed = {
             self.xn_init: init_batch[2],
             self.cn_init: init_batch[3],
             self.x_init: init_batch[0],
-            self.c_init: init_batch[1]})
+            self.c_init: init_batch[1]}
+        session.run(initializer_op, feed)
+        session.run(self.dd_init_op, feed)
         self.logger.info("Initialized model from scratch")
 
 
