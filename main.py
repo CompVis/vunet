@@ -470,7 +470,6 @@ if __name__ == "__main__":
     parser.add_argument("--tar_img", help = "path to tar_img")
     parser.add_argument("--src_jo", help = "path to src_jo")
     parser.add_argument("--tar_jo", help = "path to tar_jo")
-    parser.add_argument("--spatial_size", default = default_log_dir, help = "path to log into")
     parser.set_defaults(retrain = False)
 
     opt = parser.parse_args()
