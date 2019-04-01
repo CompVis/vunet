@@ -17,7 +17,7 @@ This is a slightly modified version of the code that was used to produce the
 results in the paper. The original code was cleaned up, the data dependent
 weight initialization was made compatible with `tensorflow >= 1.3.0` and a
 unified model between the datasets is used. You can find [the original code and
-checkpoints online](http://129.206.117.181:8080/runs) but if you want to use
+checkpoints online (`vunet/runs`)](https://heibox.uni-heidelberg.de/d/71842715a8/) but if you want to use
 them, please keep in mind that:
 
 - the original checkpoints are not compatible with the graphs defined in this
@@ -38,7 +38,7 @@ pretrained models but other versions might work as well.
 
 ## Training
 
-[Download](http://129.206.117.181:8080/) and unpack the desired dataset.
+[Download](https://heibox.uni-heidelberg.de/d/71842715a8/) and unpack the desired dataset.
 This results in a folder containing an `index.p` file. Either add a symbolic
 link named `data` pointing to the download directory or adjust the path to
 the `index.p` file in the `<dataset>.yaml` config file.
@@ -67,7 +67,7 @@ Gram matrices. To do so run
 ## Pretrained models
 
 You can find [pretrained models
-online](http://129.206.117.181:8080/pretrained_checkpoints).
+online (`vunet/pretrained_checkpoints`)](https://heibox.uni-heidelberg.de/d/71842715a8/).
 
 
 ## Other Datasets
