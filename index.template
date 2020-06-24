@@ -67,8 +67,11 @@
 				</section>
 
 			<!-- Two -->
-				<section id="two" class="wrapper style2 special">
+				<section id="two" class="wrapper style2 special" style="padding: 2em 0 4em 0">
 					<div class="container">
+          <p style="text-align:center; margin: 0 0 4em 0">See also our new work
+          <a href="https://compvis.github.io/iin/">"A Disentangling Invertible
+          Interpretation Network for Explaining Latent Representations"</a>.</p>
 						<header class="major">
 							<h2>Results</h2>
 							<p>and applications of our model.</p>
