@@ -1,0 +1,7 @@
+tensorflow==1.2.1
+numpy==1.14.5
+opencv-python==3.4.3.18
+Pillow==5.2.0
+tqdm==4.26.0
+PyYAML==3.13
+h5py==2.8.0
