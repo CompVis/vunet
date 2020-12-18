@@ -62,19 +62,87 @@
                 <p>Deep generative models have demonstrated great performance in image synthesis. However, results deteriorate in case of spatial deformations, since they generate images of objects directly, rather than modeling the intricate interplay of their inherent shape and appearance. We present a conditional U-Net for shape-guided image generation, conditioned on the output of a variational autoencoder for appearance.  The approach is trained end-to-end on images, without requiring samples of the same object with varying pose or appearance. Experiments show that the model enables conditional image generation and transfer.  Therefore, either shape or appearance can be retained from a query image, while freely altering the other. Moreover, appearance can be sampled due to its stochastic latent representation, while preserving shape. In quantitative and qualitative experiments on COCO, DeepFashion, shoes, Market-1501 and handbags, the approach demonstrates significant improvements over the state-of-the-art.
                 </p>
 							</div>
+
+<!-- related works !-->
+
+<div class="12u">
+  <h4>Newer Works on Deep Generative Models</h4>
+</div>
+
+<div class="12u">
+  <h6>
+    <a href="https://compvis.github.io/taming-transformers/">
+      Taming Transformers for High-Resolution Image Synthesis (2020)
+    </a>
+  </h6>
+</div>
+<div class="3u 12u$(medium)">
+  <div class="image fit align-center">
+    <a href="https://compvis.github.io/taming-transformers/">
+      <img src="https://compvis.github.io/taming-transformers/paper/teaser.png" style="max-width:25em; margin:auto" />
+    </a>
+  </div>
+</div>
+<div class="9u 12u$(medium)">
+  <p align="justify" style="line-height: 1.0em; font-size:0.8em">
+  Designed to learn long-range interactions on sequential data, transformers continue to show state-of-the-art results on a wide variety of tasks. In contrast to CNNs, they contain no inductive bias that prioritizes local interactions. This makes them expressive, but also computationally infeasible for long sequences, such as high-resolution images. We demonstrate how combining the effectiveness of the inductive bias of CNNs with the expressivity of transformers enables them to model and thereby synthesize high-resolution images. We show how to (i) use CNNs to learn a context-rich vocabulary of image constituents, and in turn (ii) utilize transformers to efficiently model their composition within high-resolution images. Our approach is readily applied to conditional synthesis tasks, where both non-spatial information, such as object classes, and spatial information, such as segmentations, can control the generated image. In particular, we present the first results on semantically-guided synthesis of megapixel images with transformers.
+  </p>
+</div>
+
+<div class="12u">
+  <h6>
+    <a href="https://compvis.github.io/net2net/">
+      Network-to-Network Translation with Conditional Invertible Neural Networks (2020)
+    </a>
+  </h6>
+</div>
+<div class="3u 12u$(medium)">
+  <div class="image fit align-center">
+    <a href="https://compvis.github.io/net2net/">
+      <img src="https://compvis.github.io/net2net/paper/teaser.png" style="max-width:25em; margin:auto" />
+    </a>
+  </div>
+</div>
+<div class="9u 12u$(medium)">
+  <p align="justify" style="line-height: 1.0em; font-size:0.8em">
+  Given the ever-increasing computational costs of modern machine learning models, we need to find new ways to reuse such expert models and thus tap into the resources that have been invested in their creation. Recent work suggests that the power of these massive models is captured by the representations they learn. Therefore, we seek a model that can relate between different existing representations and propose to solve this task with a conditionally invertible network. This network demonstrates its capability by (i) providing generic transfer between diverse domains, (ii) enabling controlled content synthesis by allowing modification in other domains, and (iii) facilitating diagnosis of existing representations by translating them into interpretable domains such as images. Our domain transfer network can translate between fixed representations without having to learn or finetune them. This allows users to utilize various existing domain-specific expert models from the literature that had been trained with extensive computational resources. Experiments on diverse conditional image synthesis tasks, competitive image modification results and experiments on image-to-image and text-to-image generation demonstrate the generic applicability of our approach. For example, we translate between BERT and BigGAN, state-of-the-art text and image models to provide text-to-image generation, which neither of both experts can perform on their own.
+  </p>
+</div>
+
+<div class="12u">
+  <h6>
+    <a href="https://compvis.github.io/invariances/">
+      Making Sense of CNNs: Interpreting Deep Representations & Their Invariances with INNs (2020)
+    </a>
+  </h6>
+</div>
+<div class="3u 12u$(medium)">
+  <div class="image fit align-center">
+    <a href="https://compvis.github.io/invariances/">
+      <img src="https://compvis.github.io/invariances/images/overview.jpg" style="max-width:25em; margin:auto" />
+    </a>
+  </div>
+</div>
+<div class="9u 12u$(medium)">
+  <p align="justify" style="line-height: 1.0em; font-size:0.8em">
+  To tackle increasingly complex tasks, it has become an essential ability of neural networks to learn abstract representations. These task-specific representations and, particularly, the invariances they capture turn neural networks into black box models that lack interpretability. To open such a black box, it is, therefore, crucial to uncover the different semantic concepts a model has learned as well as those that it has learned to be invariant to. We present an approach based on INNs that (i) recovers the task-specific, learned invariances by disentangling the remaining factor of variation in the data and that (ii) invertibly transforms these recovered invariances combined with the model representation into an equally expressive one with accessible semantic concepts. As a consequence, neural network representations become understandable by providing the means to (i) expose their semantic meaning, (ii) semantically modify a representation, and (iii) visualize individual learned semantic concepts and invariances. Our invertible approach significantly extends the abilities to understand black box models by enabling post-hoc interpretations of state-of-the-art networks without compromising their performance.
+  </p>
+</div>
+
+
+<!-- /related works !-->
 						</div>
 					</div>
+
+
 				</section>
 
 			<!-- Two -->
 				<section id="two" class="wrapper style2 special" style="padding: 2em 0 4em 0">
 					<div class="container">
-          <p style="text-align:center; margin: 0 0 4em 0">See also our new work
-          <a href="https://compvis.github.io/iin/">"A Disentangling Invertible
-          Interpretation Network for Explaining Latent Representations"</a>.</p>
 						<header class="major">
 							<h2>Results</h2>
-							<p>and applications of our model.</p>
+							<p>of VUNet.</p>
 						</header>
 
             __TEMPLATE_STRING__
